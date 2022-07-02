@@ -1,13 +1,17 @@
 UBUNTU RPC (scaffold-rpc)
 
 sudo add-apt-repository -y ppa:ethereum/ethereum
+
 sudo apt-get update
+
 sudo apt-get install ethereum
 
 = created geth script =
 
 sudo apt install nodejs npm
+
 sudo npm i -g pm2
+
 pm2 start index.js --name geth
 
 pm2 startup
