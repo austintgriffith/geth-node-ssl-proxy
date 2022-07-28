@@ -10,6 +10,8 @@ sudo apt-get install ethereum
 
 git clone https://github.com/austintgriffith/geth-node-ssl-proxy
 
+cd geth-node-ssl-proxy
+
 sudo apt install nodejs npm
 
 sudo npm i -g pm2
