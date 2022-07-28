@@ -8,6 +8,8 @@ sudo apt-get install ethereum
 
 = created geth script =
 
+git clone https://github.com/austintgriffith/geth-node-ssl-proxy
+
 sudo apt install nodejs npm
 
 sudo npm i -g pm2
