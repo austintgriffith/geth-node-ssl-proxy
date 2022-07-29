@@ -19,6 +19,7 @@ sudo npm i -g pm2
 pm2 start index.js --name geth
 
 pm2 startup
+(and then run the command it comes back with)
 
 = created proxy script =
 
