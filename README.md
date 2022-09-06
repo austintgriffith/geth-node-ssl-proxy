@@ -36,3 +36,13 @@ sudo apt  install certbot
 pm2 start proxy.js
 
 pm2 save
+
+
+===----- update geth
+
+sudo apt-get update
+
+sudo apt-get install ethereum
+
+sudo apt-get upgrade geth
+
