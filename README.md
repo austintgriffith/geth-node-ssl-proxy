@@ -37,7 +37,6 @@ pm2 start proxy.js
 
 pm2 save
 
-
 ===----- update geth
 
 sudo apt-get update
@@ -45,4 +44,19 @@ sudo apt-get update
 sudo apt-get install ethereum
 
 sudo apt-get upgrade geth
+
+
+
+====----- add prysm ( https://docs.prylabs.network/docs/install/install-with-script )
+
+mkdir prysm && cd prysm
+curl https://raw.githubusercontent.com/prysmaticlabs/prysm/master/prysm.sh --output prysm.sh && chmod +x prysm.sh
+
+openssl rand -hex 32 | tr -d "\n" > "jwt.hex"
+
+= added admin,web3 and the jwtsecret to the geth command (index.js)
+
+= created beaconchain script to run prysm and fired it up with pm2
+
+
 
