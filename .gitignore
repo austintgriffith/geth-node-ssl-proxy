@@ -1,1 +1,7 @@
 node_modules
+beaconchain.log
+geth.log
+prysm/
+server.cert
+server.key
+yarn.lock

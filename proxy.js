@@ -77,7 +77,7 @@ app.get('/', (req, res) => {
   //}
 })
 
-app.get('/traffic', (req, res) => {
+app.get('/letathousandscaffoldethsbloom', (req, res) => {
   //if(req.headers&&req.headers.referer&&req.headers.referer.indexOf("sandbox.eth.build")>=0){
     var sortable = [];
     for (var item in memcache) {

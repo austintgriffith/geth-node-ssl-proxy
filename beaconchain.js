@@ -2,10 +2,10 @@
 const fs = require('fs')
 const { exec } = require('child_process');
 
-console.log("Starting up geth node...")
+console.log("Starting up prysm beaconchain node...")
 try{
 
-  exec('geth --http.port 48545 --http.vhosts=* --cache=4096 --maxpeers=50 --http --http.addr "0.0.0.0" --http.corsdomain "*" --http.api="db,eth,net,engine,admin,web3,debug,txpool" --authrpc.jwtsecret "/home/ubuntu/geth-node-ssl-proxy/prysm/jwt.hex" >> ./geth.log 2>&1', (err, stdout, stderr) => {
+  exec('prysm/prysm.sh beacon-chain --execution-endpoint=http://localhost:8551 --jwt-secret=/home/ubuntu/geth-node-ssl-proxy/prysm/jwt.hex >> ./beaconchain.log 2>&1', (err, stdout, stderr) => {
     console.log(`stdout: ${stdout}`);
     console.log(`stderr: ${stderr}`);
   })
