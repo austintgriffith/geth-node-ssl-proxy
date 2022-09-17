@@ -58,5 +58,7 @@ openssl rand -hex 32 | tr -d "\n" > "jwt.hex"
 
 = created beaconchain script to run prysm and fired it up with pm2
 
+====----- upgrading prysm happens on the sh command BUT you need to update your db:
 
+./prysm.sh validator db migrate down --datadir=/home/ubuntu/prysm/prysm_wallet/direct
 
