@@ -62,3 +62,13 @@ openssl rand -hex 32 | tr -d "\n" > "jwt.hex"
 
 ./prysm.sh validator db migrate down --datadir=/home/ubuntu/prysm/prysm_wallet/direct
 
+
+====----- Installing nethermind
+
+sudo add-apt-repository ppa:nethermindeth/nethermind
+
+sudo apt install nethermind
+
+
+
+
