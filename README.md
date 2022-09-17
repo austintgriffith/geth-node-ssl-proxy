@@ -65,9 +65,7 @@ openssl rand -hex 32 | tr -d "\n" > "jwt.hex"
 
 ====----- Installing nethermind
 
-sudo add-apt-repository ppa:nethermindeth/nethermind
-
-sudo apt install nethermind
+// https://docs.nethermind.io/nethermind/ethereum-client/running-nethermind/running-the-client
 
 
 
