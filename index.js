@@ -4,8 +4,8 @@ const { exec } = require('child_process');
 
 console.log("Starting up geth node...")
 try{
-
-  exec('geth --http --http.api="eth,net,engine,admin" --authrpc.jwtsecret="./jwt.hex" >> ./geth.log 2>&1', (err, stdout, stderr) => {
+  // --http.port 48545 --http.vhosts=* --cache=4096 --maxpeers=50 --http --http.addr "0.0.0.0" --http.corsdomain "*" --http.api="db,eth,net,web3,debug,txpool"
+  exec('geth --cache=4096 --http --http.addr "0.0.0.0" --http.port 48545 --http.vhosts=* --http.api="db,eth,net,web3,engine,admin,debug,txpool" --http.corsdomain "*" --authrpc.jwtsecret="./prysm/jwt.hex" >> ./geth.log 2>&1', (err, stdout, stderr) => {
     console.log(`stdout: ${stdout}`);
     console.log(`stderr: ${stderr}`);
   })
