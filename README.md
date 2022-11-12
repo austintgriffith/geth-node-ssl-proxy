@@ -50,6 +50,7 @@ sudo apt-get upgrade geth
 ====----- add prysm ( https://docs.prylabs.network/docs/install/install-with-script )
 
 mkdir prysm && cd prysm
+
 curl https://raw.githubusercontent.com/prysmaticlabs/prysm/master/prysm.sh --output prysm.sh && chmod +x prysm.sh
 
 openssl rand -hex 32 | tr -d "\n" > "jwt.hex"
