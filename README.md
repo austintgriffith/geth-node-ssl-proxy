@@ -28,7 +28,7 @@ curl https://raw.githubusercontent.com/prysmaticlabs/prysm/master/prysm.sh --out
 
 openssl rand -hex 32 | tr -d "\n" > "jwt.hex"
 
-
+cd ..
 
 ====-----  start geth
 
