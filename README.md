@@ -34,10 +34,15 @@ manually run prysm to crush the dialog:
 
 type "accept"
 
+cp ../beaconchain.js .
+
+pm2 start beaconchain.js
+
+tail -f ~/geth-node-ssl-proxy/prysm/beaconchain.log
+
 cd ..
 
 ====-----  start geth
-
 
 pm2 start index.js --name geth
 
