@@ -28,6 +28,12 @@ curl https://raw.githubusercontent.com/prysmaticlabs/prysm/master/prysm.sh --out
 
 openssl rand -hex 32 | tr -d "\n" > "jwt.hex"
 
+manually run prysm to crush the dialog: 
+
+./prysm.sh beacon-chain
+
+type "accept"
+
 cd ..
 
 ====-----  start geth
