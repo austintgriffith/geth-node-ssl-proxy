@@ -16,6 +16,23 @@ sudo apt install nodejs npm
 
 sudo npm i -g pm2
 
+== before you start geth you need the prysm dir in place with the jwt...
+
+
+
+====----- add prysm ( https://docs.prylabs.network/docs/install/install-with-script )
+
+mkdir prysm && cd prysm
+
+curl https://raw.githubusercontent.com/prysmaticlabs/prysm/master/prysm.sh --output prysm.sh && chmod +x prysm.sh
+
+openssl rand -hex 32 | tr -d "\n" > "jwt.hex"
+
+
+
+====-----  start geth
+
+
 pm2 start index.js --name geth
 
 pm2 startup
@@ -47,13 +64,6 @@ sudo apt-get upgrade geth
 
 
 
-====----- add prysm ( https://docs.prylabs.network/docs/install/install-with-script )
-
-mkdir prysm && cd prysm
-
-curl https://raw.githubusercontent.com/prysmaticlabs/prysm/master/prysm.sh --output prysm.sh && chmod +x prysm.sh
-
-openssl rand -hex 32 | tr -d "\n" > "jwt.hex"
 
 = added admin,web3 and the jwtsecret to the geth command (index.js)
 
