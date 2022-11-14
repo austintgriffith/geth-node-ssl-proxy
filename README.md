@@ -46,6 +46,8 @@ cd ..
 
 pm2 start index.js --name geth
 
+tail -f ~/geth-node-ssl-proxy/geth.log
+
 pm2 startup
 (and then run the command it comes back with)
 
