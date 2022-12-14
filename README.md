@@ -20,6 +20,8 @@ sudo npm i -g pm2
 
 sudo npm i yarn -g
 
+sudo apt  install -y certbot
+
 sudo apt-get install -y ethereum
 
 = created geth script =
@@ -27,7 +29,6 @@ sudo apt-get install -y ethereum
 git clone https://github.com/austintgriffith/geth-node-ssl-proxy
 
 cd geth-node-ssl-proxy
-
 
 == before you start geth you need the prysm dir in place with the jwt...
 
@@ -64,13 +65,9 @@ pm2 startup
 
 = created proxy script =
 
-
-
 yarn add https http-proxy express cors ssl-root-cas
 
 = time for ssl = had to open port 80 but closed and then left 443 open
-
-sudo apt  install certbot
 
 = ec2 security group **open http for le script** and then keep only https open
 
@@ -93,7 +90,6 @@ sudo apt-get upgrade geth
 ====----- upgrading prysm happens on the sh command BUT you need to update your db:
 
 ./prysm.sh validator db migrate down --datadir=/home/ubuntu/prysm/prysm_wallet/direct
-
 
 ====----- Installing nethermind
 
