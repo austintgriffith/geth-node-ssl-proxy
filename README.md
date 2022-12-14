@@ -4,7 +4,20 @@ sudo add-apt-repository -y ppa:ethereum/ethereum
 
 sudo apt-get update
 
-sudo apt-get install ethereum
+sudo apt-get upgrade -y
+
+# current node version
+curl -fsSL https://deb.nodesource.com/setup_current.x | sudo -E bash -
+# or LTS node verion
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+
+sudo apt install -y nodejs 
+
+sudo npm i -g pm2
+
+sudo npm i yarn -g
+
+sudo apt-get install -y ethereum
 
 = created geth script =
 
@@ -12,13 +25,8 @@ git clone https://github.com/austintgriffith/geth-node-ssl-proxy
 
 cd geth-node-ssl-proxy
 
-sudo apt install nodejs npm
-
-sudo npm i -g pm2
 
 == before you start geth you need the prysm dir in place with the jwt...
-
-
 
 ====----- add prysm ( https://docs.prylabs.network/docs/install/install-with-script )
 
@@ -53,7 +61,7 @@ pm2 startup
 
 = created proxy script =
 
-sudo npm i yarn -g
+
 
 yarn add https http-proxy express cors ssl-root-cas
 
@@ -74,9 +82,6 @@ sudo apt-get update
 sudo apt-get install ethereum
 
 sudo apt-get upgrade geth
-
-
-
 
 = added admin,web3 and the jwtsecret to the geth command (index.js)
 
