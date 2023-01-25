@@ -59,7 +59,9 @@ app.post('/', (req, res) => {
   //if(req.headers&&req.headers.referer&&req.headers.referer.indexOf("sandbox.eth.build")>=0){
     proxy.web(req, res, {
         //target: 'http://10.0.0.237:8545'
-        target: localProviderUrl
+        //target: localProviderUrl
+        changeOrigin: true,
+        target: "https://rpc2.scaffoldeth.io:48544"
         //target: 'http://10.0.0.188:8545'
       });
     //  console.log("post served!",)
@@ -72,7 +74,9 @@ app.get('/', (req, res) => {
   //if(req.headers&&req.headers.referer&&req.headers.referer.indexOf("sandbox.eth.build")>=0){
     proxy.web(req, res, {
       //target: 'http://10.0.0.237:8545'
-      target: localProviderUrl
+      //target: localProviderUrl
+      changeOrigin: true,
+      target: "https://rpc2.scaffoldeth.io:48544"
       //target: 'http://10.0.0.188:8545'
     });
     console.log("geth ssl served!")
