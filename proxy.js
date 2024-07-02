@@ -9,6 +9,83 @@ var app = express();
 const ethers = require("ethers");
 https.globalAgent.options.ca = require("ssl-root-cas").create();
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
+const WebSocket = require('ws');
+const { forEach } = require("ssl-root-cas");
+
+// Create a WebSocket server listening on all network interfaces on port 8080
+const wss = new WebSocket.Server({ port: 8080, host: '0.0.0.0' });
+
+let connectedClients = [];
+
+console.log('WebSocket server started on ws://0.0.0.0:8080');
+
+wss.on('connection', function connection(ws, req) {
+  const ip = req.socket.remoteAddress;
+  console.log('Client connected',ip);
+
+  connectedClients.push({
+    ws: ws,
+    ip: ip,
+    machineInfo:{},
+  })
+
+  ws.on('close', function close() {
+    console.log('Client disconnected');
+    connectedClients = connectedClients.filter(client => client.ws !== ws);  // Remove the client from the list on disconnect
+  });
+
+  ws.on('message', function incoming(message) {
+    console.log('Received:', message);
+
+    //find the connectedClient that matches ws 
+    const client = connectedClients.find(client => client.ws === ws);
+    if (client) {
+      client.machineInfo = JSON.parse(message);
+    }
+
+  });
+});
+
+
+
+/*
+// Function to ask a random client for the time
+function askRandomClientForTime() {
+  console.log("# of CLIENTS:",connectedClients.length)
+  if (connectedClients.length > 0) {
+    forEach(connectedClients, function (client) {
+      console.log("ASKING CLIENT",client.id)
+      client.send('Give me some info about your node?');
+    });
+  } else {
+    console.log('No clients connected');
+  }
+}
+
+// Periodically ask a random client for the current time
+setInterval(askRandomClientForTime, 15000);  // Ask every client about their machine
+*/
+
+app.get("/clients", (req, res) => {
+  //if(req.headers&&req.headers.referer&&req.headers.referer.indexOf("sandbox.eth.build")>=0){
+  console.log(" 🧑‍💻 clients ",connectedClients.length);
+
+  let clientDisplay = connectedClients.map(client => {
+    return "<div style='padding:10px;font-size:18px'> "+client.ip+" <pre>"+JSON.stringify(client.machineInfo)+"</pre></div>"
+  }).join("")
+
+
+  res.send(
+    "<html><body><div style='padding:20px;font-size:18px'><H1>CLIENTS</H1></div><pre>" +
+    connectedClients.length +
+      "</pre>"+clientDisplay+"</body></html>"
+  );
+   
+  //JSON.stringify(sortable)
+});
+
+
+
 
 const localProviderUrl = "http://localhost:48545";
 app.use(bodyParser.json());
@@ -40,6 +117,7 @@ setInterval(()=>{
 */
 
 const targetUrl = "https://office.buidlguidl.com:48544";
+
 
 app.post("/", (req, res) => {
   if (req.headers && req.headers.referer) {
@@ -212,6 +290,7 @@ app.get("/sync", (req, res) => {
 
   //JSON.stringify(sortable)
 });
+
 
 app.get("/block", (req, res) => {
   //if(req.headers&&req.headers.referer&&req.headers.referer.indexOf("sandbox.eth.build")>=0){
