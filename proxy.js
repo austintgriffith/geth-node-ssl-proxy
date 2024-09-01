@@ -11,6 +11,10 @@ https.globalAgent.options.ca = require("ssl-root-cas").create();
 process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
 const WebSocket = require('ws');
 const { forEach } = require("ssl-root-cas");
+const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
+const { Pool } = require('pg');
+const createRoute = require('./create');
+
 
 // Create a WebSocket server listening on all network interfaces on port 8080
 const wss = new WebSocket.Server({ port: 8080, host: '0.0.0.0' });
@@ -208,6 +212,226 @@ app.get("/proxy", (req, res) => {
   );
 });
 
+let pool;
+
+require('dotenv').config();
+
+async function initializeDbConnection() {
+  const secret_name = process.env.RDS_SECRET_NAME;
+  const client = new SecretsManagerClient({ 
+    region: "us-east-1",
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    }
+  });
+
+  try {
+    const response = await client.send(
+      new GetSecretValueCommand({
+        SecretId: secret_name,
+        VersionStage: "AWSCURRENT",
+      })
+    );
+    const secret = JSON.parse(response.SecretString);
+
+    const dbConfig = {
+      host: 'bgclientdb.cluster-cjoo0gi8an8c.us-east-1.rds.amazonaws.com',
+      user: secret.username,
+      password: secret.password,
+      database: secret.dbname || 'postgres',
+      port: 5432,
+      ssl: true
+    };
+
+    pool = new Pool(dbConfig);
+    console.log("Database connection initialized");
+  } catch (error) {
+    console.error("Error initializing database connection:", error);
+  }
+}
+
+initializeDbConnection();
+
+app.locals.pool = pool;
+
+app.get("/create", createRoute);
+
+app.get("/checkin", async (req, res) => {
+  console.log("/CHECKIN", req.headers.referer);
+
+  if (!pool) {
+    return res.status(500).send("Database connection not initialized");
+  }
+
+  // Extract data from query parameters
+  const {
+    id,
+    node_version,
+    execution_client,
+    consensus_client,
+    cpu_usage,
+    memory_usage,
+    storage_usage,
+    block_number,
+    block_hash,
+    peer_count
+  } = req.query;
+
+  // Get the client's IP address
+  const ip_address = req.ip || req.connection.remoteAddress;
+
+  // Validate required fields
+  if (!id) {
+    return res.status(400).send("Missing required parameter: id");
+  }
+
+  // Convert numeric fields and provide default values
+  const parsedCpuUsage = parseFloat(cpu_usage) || null;
+  const parsedMemoryUsage = parseFloat(memory_usage) || null;
+  const parsedStorageUsage = parseFloat(storage_usage) || null;
+  const parsedBlockNumber = block_number ? BigInt(block_number) : null;
+  const parsedPeerCount = parseInt(peer_count) || null;
+
+  const upsertQuery = `
+    INSERT INTO node_status (
+      id, node_version, execution_client, consensus_client, 
+      cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, peer_count
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11)
+    ON CONFLICT (id) DO UPDATE SET
+      node_version = EXCLUDED.node_version,
+      execution_client = EXCLUDED.execution_client,
+      consensus_client = EXCLUDED.consensus_client,
+      cpu_usage = EXCLUDED.cpu_usage,
+      memory_usage = EXCLUDED.memory_usage,
+      storage_usage = EXCLUDED.storage_usage,
+      block_number = EXCLUDED.block_number,
+      block_hash = EXCLUDED.block_hash,
+      last_checkin = CURRENT_TIMESTAMP,
+      ip_address = EXCLUDED.ip_address,
+      peer_count = EXCLUDED.peer_count;
+  `;
+
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query(upsertQuery, [
+        id, node_version, execution_client, consensus_client,
+        parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedPeerCount
+      ]);
+      res.send(`
+        <html>
+          <body>
+            <div style='padding:20px;font-size:18px'>
+              <h1>CHECKIN SUCCESSFUL</h1>
+              <p>Node status updated for ID: ${id}</p>
+              <p>IP Address: ${ip_address}</p>
+            </div>
+          </body>
+        </html>
+      `);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error updating node status:', err);
+    res.status(500).send(`
+      <html>
+        <body>
+          <div style='padding:20px;font-size:18px'>
+            <h1>CHECKIN FAILED</h1>
+            <p>An error occurred while trying to update the node status.</p>
+            <p>Error: ${err.message}</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+});
+
+app.get("/active", async (req, res) => {
+  console.log("/ACTIVE", req.headers.referer);
+
+  if (!pool) {
+    return res.status(500).send("Database connection not initialized");
+  }
+
+  const minutes = parseInt(req.query.minutes) || 5; // Default to 5 minutes if not specified
+
+  const query = `
+    SELECT * FROM node_status
+    WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
+    ORDER BY last_checkin DESC;
+  `;
+
+  try {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(query);
+      const activeNodes = result.rows;
+
+      let tableRows = activeNodes.map(node => `
+        <tr>
+          <td>${node.id}</td>
+          <td>${node.node_version}</td>
+          <td>${node.execution_client}</td>
+          <td>${node.consensus_client}</td>
+          <td>${node.cpu_usage}</td>
+          <td>${node.memory_usage}</td>
+          <td>${node.storage_usage}</td>
+          <td>${node.block_number}</td>
+          <td>${node.block_hash}</td>
+          <td>${node.last_checkin}</td>
+          <td>${node.ip_address}</td>
+          <td>${node.peer_count !== null ? node.peer_count : 'N/A'}</td>
+        </tr>
+      `).join('');
+
+      res.send(`
+        <html>
+          <body>
+            <div style='padding:20px;font-size:18px'>
+              <h1>ACTIVE NODES (Last ${minutes} minutes)</h1>
+              <table border="1">
+                <tr>
+                  <th>ID</th>
+                  <th>Version</th>
+                  <th>Execution Client</th>
+                  <th>Consensus Client</th>
+                  <th>CPU Usage</th>
+                  <th>Memory Usage</th>
+                  <th>Storage Usage</th>
+                  <th>Block Number</th>
+                  <th>Block Hash</th>
+                  <th>Last Check-in</th>
+                  <th>IP Address</th>
+                  <th>Peer Count</th>
+                </tr>
+                ${tableRows}
+              </table>
+            </div>
+          </body>
+        </html>
+      `);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving active nodes:', err);
+    res.status(500).send(`
+      <html>
+        <body>
+          <div style='padding:20px;font-size:18px'>
+            <h1>ERROR RETRIEVING ACTIVE NODES</h1>
+            <p>An error occurred while trying to retrieve active nodes.</p>
+            <p>Error: ${err.message}</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+});
+
 app.get("/methods", (req, res) => {
   console.log("/methods", req.headers.referer);
   res.send(
@@ -318,6 +542,46 @@ app.get("/block", (req, res) => {
   );
 
   //JSON.stringify(sortable)
+});
+
+app.get("/time", async (req, res) => {
+  console.log("/TIME", req.headers.referer);
+
+  if (!pool) {
+    return res.status(500).send("Database connection not initialized");
+  }
+
+  try {
+    const client = await pool.connect();
+    try {
+      const result = await client.query('SELECT CURRENT_TIMESTAMP');
+      const currentTime = result.rows[0].current_timestamp;
+      res.send(`
+        <html>
+          <body>
+            <div style='padding:20px;font-size:18px'>
+              <h1>CURRENT DATABASE TIME</h1>
+              <p>${currentTime}</p>
+            </div>
+          </body>
+        </html>
+      `);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving time from database:', err);
+    res.status(500).send(`
+      <html>
+        <body>
+          <div style='padding:20px;font-size:18px'>
+            <h1>ERROR RETRIEVING TIME</h1>
+            <p>An error occurred while trying to retrieve the time from the database.</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
 });
 
 https
