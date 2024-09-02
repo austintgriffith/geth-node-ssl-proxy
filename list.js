@@ -39,29 +39,48 @@ async function initializeDbConnection() {
   }
 }
 
-async function listTables() {
-  console.log("Listing database tables...");
+async function displayTableContents() {
+  console.log("Displaying ip_points and node_status table contents...");
 
   let pool;
   try {
     pool = await initializeDbConnection();
 
-    const query = `
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      ORDER BY table_name;
+    // Query ip_points table
+    const ipPointsQuery = `
+      SELECT ip_address, points::bigint
+      FROM ip_points
+      ORDER BY points DESC;
     `;
+    const ipPointsResult = await pool.query(ipPointsQuery);
 
-    const result = await pool.query(query);
-    const tables = result.rows.map(row => row.table_name);
+    console.log("\nip_points table contents:");
+    console.table(ipPointsResult.rows.map(row => ({
+      ip_address: row.ip_address,
+      points: BigInt(row.points)
+    })));
 
-    console.log("Database Tables:");
-    tables.forEach((table, index) => {
-      console.log(`${index + 1}. ${table}`);
-    });
+    // Query node_status table
+    const nodeStatusQuery = `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'node_status';
+    `;
+    const columnResult = await pool.query(nodeStatusQuery);
+    const columns = columnResult.rows.map(row => row.column_name);
+
+    const nodeStatusQuery2 = `
+      SELECT ${columns.join(', ')}
+      FROM node_status
+      ORDER BY last_checkin DESC;
+    `;
+    const nodeStatusResult = await pool.query(nodeStatusQuery2);
+
+    console.log("\nnode_status table contents:");
+    console.table(nodeStatusResult.rows);
+
   } catch (err) {
-    console.error('Error listing database tables:', err);
+    console.error('Error displaying table contents:', err);
   } finally {
     if (pool) {
       await pool.end();
@@ -69,4 +88,4 @@ async function listTables() {
   }
 }
 
-listTables();
+displayTableContents();

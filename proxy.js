@@ -255,13 +255,17 @@ initializeDbConnection();
 
 app.locals.pool = pool;
 
-app.get("/create", createRoute);
+// app.get("/create", createRoute);
 
 app.get("/checkin", async (req, res) => {
-  console.log("/CHECKIN", req.headers.referer);
+  let logMessages = [];
+
+  logMessages.push(`/CHECKIN ${req.headers.referer}`);
+  logMessages.push(`Request query parameters: ${JSON.stringify(req.query)}`);
 
   if (!pool) {
-    return res.status(500).send("Database connection not initialized");
+    logMessages.push("Database connection not initialized");
+    return res.status(500).send(logMessages.join("<br>"));
   }
 
   // Extract data from query parameters
@@ -275,7 +279,8 @@ app.get("/checkin", async (req, res) => {
     storage_usage,
     block_number,
     block_hash,
-    peer_count
+    execution_peers,
+    consensus_peers
   } = req.query;
 
   // Get the client's IP address
@@ -283,7 +288,8 @@ app.get("/checkin", async (req, res) => {
 
   // Validate required fields
   if (!id) {
-    return res.status(400).send("Missing required parameter: id");
+    logMessages.push("Missing required parameter: id");
+    return res.status(400).send(logMessages.join("<br>"));
   }
 
   // Convert numeric fields and provide default values
@@ -291,13 +297,14 @@ app.get("/checkin", async (req, res) => {
   const parsedMemoryUsage = parseFloat(memory_usage) || null;
   const parsedStorageUsage = parseFloat(storage_usage) || null;
   const parsedBlockNumber = block_number ? BigInt(block_number) : null;
-  const parsedPeerCount = parseInt(peer_count) || null;
+  const parsedExecutionPeers = parseInt(execution_peers) || null;
+  const parsedConsensusPeers = parseInt(consensus_peers) || null;
 
   const upsertQuery = `
     INSERT INTO node_status (
       id, node_version, execution_client, consensus_client, 
-      cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, peer_count
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11)
+      cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12)
     ON CONFLICT (id) DO UPDATE SET
       node_version = EXCLUDED.node_version,
       execution_client = EXCLUDED.execution_client,
@@ -309,7 +316,8 @@ app.get("/checkin", async (req, res) => {
       block_hash = EXCLUDED.block_hash,
       last_checkin = CURRENT_TIMESTAMP,
       ip_address = EXCLUDED.ip_address,
-      peer_count = EXCLUDED.peer_count;
+      execution_peers = EXCLUDED.execution_peers,
+      consensus_peers = EXCLUDED.consensus_peers;
   `;
 
   try {
@@ -317,15 +325,16 @@ app.get("/checkin", async (req, res) => {
     try {
       await client.query(upsertQuery, [
         id, node_version, execution_client, consensus_client,
-        parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedPeerCount
+        parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers
       ]);
+      logMessages.push("CHECKIN SUCCESSFUL");
+      logMessages.push(`Node status updated for ID: ${id}`);
+      logMessages.push(`IP Address: ${ip_address}`);
       res.send(`
         <html>
           <body>
             <div style='padding:20px;font-size:18px'>
-              <h1>CHECKIN SUCCESSFUL</h1>
-              <p>Node status updated for ID: ${id}</p>
-              <p>IP Address: ${ip_address}</p>
+              ${logMessages.join("<br>")}
             </div>
           </body>
         </html>
@@ -334,14 +343,12 @@ app.get("/checkin", async (req, res) => {
       client.release();
     }
   } catch (err) {
-    console.error('Error updating node status:', err);
+    logMessages.push('Error updating node status:', err.message);
     res.status(500).send(`
       <html>
         <body>
           <div style='padding:20px;font-size:18px'>
-            <h1>CHECKIN FAILED</h1>
-            <p>An error occurred while trying to update the node status.</p>
-            <p>Error: ${err.message}</p>
+            ${logMessages.join("<br>")}
           </div>
         </body>
       </html>
@@ -356,34 +363,41 @@ app.get("/active", async (req, res) => {
     return res.status(500).send("Database connection not initialized");
   }
 
-  const minutes = parseInt(req.query.minutes) || 5; // Default to 5 minutes if not specified
-
-  const query = `
-    SELECT * FROM node_status
-    WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
-    ORDER BY last_checkin DESC;
-  `;
-
   try {
     const client = await pool.connect();
     try {
-      const result = await client.query(query);
-      const activeNodes = result.rows;
+      // First, get the total count of records
+      const countResult = await client.query('SELECT COUNT(*) FROM node_status');
+      const totalRecords = countResult.rows[0].count;
 
-      let tableRows = activeNodes.map(node => `
+      // Now, query for active nodes
+      const result = await client.query(`
+        SELECT id, node_version, execution_client, consensus_client, 
+               cpu_usage, memory_usage, storage_usage, block_number, 
+               block_hash, last_checkin, ip_address, execution_peers, consensus_peers
+        FROM node_status
+        WHERE last_checkin > NOW() - INTERVAL '5 minutes'
+        ORDER BY ip_address DESC, id DESC
+      `);
+
+      console.log(`Total records in node_status: ${totalRecords}`);
+      console.log(`Active records found: ${result.rows.length}`);
+
+      let tableRows = result.rows.map(row => `
         <tr>
-          <td>${node.id}</td>
-          <td>${node.node_version}</td>
-          <td>${node.execution_client}</td>
-          <td>${node.consensus_client}</td>
-          <td>${node.cpu_usage}</td>
-          <td>${node.memory_usage}</td>
-          <td>${node.storage_usage}</td>
-          <td>${node.block_number}</td>
-          <td>${node.block_hash}</td>
-          <td>${node.last_checkin}</td>
-          <td>${node.ip_address}</td>
-          <td>${node.peer_count !== null ? node.peer_count : 'N/A'}</td>
+          <td>${row.id}</td>
+          <td>${row.node_version}</td>
+          <td>${row.execution_client}</td>
+          <td>${row.consensus_client}</td>
+          <td>${row.cpu_usage}</td>
+          <td>${row.memory_usage}</td>
+          <td>${row.storage_usage}</td>
+          <td>${row.block_number}</td>
+          <td>${row.block_hash}</td>
+          <td>${row.last_checkin}</td>
+          <td>${row.ip_address}</td>
+          <td>${row.execution_peers}</td>
+          <td>${row.consensus_peers}</td>
         </tr>
       `).join('');
 
@@ -391,11 +405,13 @@ app.get("/active", async (req, res) => {
         <html>
           <body>
             <div style='padding:20px;font-size:18px'>
-              <h1>ACTIVE NODES (Last ${minutes} minutes)</h1>
-              <table border="1">
+              <h1>ACTIVE NODES (Last 5 minutes)</h1>
+              <p>Total records in database: ${totalRecords}</p>
+              <p>Active records: ${result.rows.length}</p>
+              <table border="1" cellpadding="5">
                 <tr>
                   <th>ID</th>
-                  <th>Version</th>
+                  <th>Node Version</th>
                   <th>Execution Client</th>
                   <th>Consensus Client</th>
                   <th>CPU Usage</th>
@@ -403,9 +419,10 @@ app.get("/active", async (req, res) => {
                   <th>Storage Usage</th>
                   <th>Block Number</th>
                   <th>Block Hash</th>
-                  <th>Last Check-in</th>
+                  <th>Last Checkin</th>
                   <th>IP Address</th>
-                  <th>Peer Count</th>
+                  <th>Execution Peers</th>
+                  <th>Consensus Peers</th>
                 </tr>
                 ${tableRows}
               </table>
@@ -423,8 +440,8 @@ app.get("/active", async (req, res) => {
         <body>
           <div style='padding:20px;font-size:18px'>
             <h1>ERROR RETRIEVING ACTIVE NODES</h1>
-            <p>An error occurred while trying to retrieve active nodes.</p>
-            <p>Error: ${err.message}</p>
+            <p>An error occurred while trying to retrieve active nodes from the database.</p>
+            <p>Error details: ${err.message}</p>
           </div>
         </body>
       </html>
