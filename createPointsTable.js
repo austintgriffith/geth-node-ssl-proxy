@@ -1,9 +1,29 @@
 const { Pool } = require('pg');
 const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
 require('dotenv').config();
+const readline = require('readline');
 
 async function createPointsTable() {
-  console.log("Creating ip_points table...");
+  console.log("Preparing to create/reset ip_points table...");
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  const confirmation = await new Promise(resolve => {
+    rl.question('Are you sure you want to create/reset the ip_points table? (yes/no): ', answer => {
+      resolve(answer.toLowerCase());
+      rl.close();
+    });
+  });
+
+  if (confirmation !== 'yes') {
+    console.log('Operation cancelled.');
+    return;
+  }
+
+  console.log("Proceeding with table creation/reset...");
 
   const secret_name = process.env.RDS_SECRET_NAME;
   const client = new SecretsManagerClient({ 

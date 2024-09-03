@@ -13,7 +13,7 @@ const WebSocket = require('ws');
 const { forEach } = require("ssl-root-cas");
 const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
 const { Pool } = require('pg');
-const createRoute = require('./create');
+const createRoute = require('./createNodeStatusTable');
 
 
 // Create a WebSocket server listening on all network interfaces on port 8080
@@ -280,11 +280,13 @@ app.get("/checkin", async (req, res) => {
     block_number,
     block_hash,
     execution_peers,
-    consensus_peers
+    consensus_peers,
+    git_branch,
+    last_commit
   } = req.query;
 
   // Get the client's IP address
-  const ip_address = req.ip || req.connection.remoteAddress;
+  const ip_address = (req.ip || req.connection.remoteAddress).replace(/^::ffff:/, '');
 
   // Validate required fields
   if (!id) {
@@ -303,8 +305,9 @@ app.get("/checkin", async (req, res) => {
   const upsertQuery = `
     INSERT INTO node_status (
       id, node_version, execution_client, consensus_client, 
-      cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12)
+      cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
+      git_branch, last_commit
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14)
     ON CONFLICT (id) DO UPDATE SET
       node_version = EXCLUDED.node_version,
       execution_client = EXCLUDED.execution_client,
@@ -317,7 +320,9 @@ app.get("/checkin", async (req, res) => {
       last_checkin = CURRENT_TIMESTAMP,
       ip_address = EXCLUDED.ip_address,
       execution_peers = EXCLUDED.execution_peers,
-      consensus_peers = EXCLUDED.consensus_peers;
+      consensus_peers = EXCLUDED.consensus_peers,
+      git_branch = EXCLUDED.git_branch,
+      last_commit = EXCLUDED.last_commit;
   `;
 
   try {
@@ -325,7 +330,8 @@ app.get("/checkin", async (req, res) => {
     try {
       await client.query(upsertQuery, [
         id, node_version, execution_client, consensus_client,
-        parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers
+        parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers,
+        git_branch, last_commit
       ]);
       logMessages.push("CHECKIN SUCCESSFUL");
       logMessages.push(`Node status updated for ID: ${id}`);
@@ -363,6 +369,8 @@ app.get("/active", async (req, res) => {
     return res.status(500).send("Database connection not initialized");
   }
 
+  const minutes = req.query.minutes ? parseInt(req.query.minutes) : 5; // Default to 5 minutes if not provided
+
   try {
     const client = await pool.connect();
     try {
@@ -374,10 +382,11 @@ app.get("/active", async (req, res) => {
       const result = await client.query(`
         SELECT id, node_version, execution_client, consensus_client, 
                cpu_usage, memory_usage, storage_usage, block_number, 
-               block_hash, last_checkin, ip_address, execution_peers, consensus_peers
+               block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
+               git_branch, last_commit
         FROM node_status
-        WHERE last_checkin > NOW() - INTERVAL '5 minutes'
-        ORDER BY ip_address DESC, id DESC
+        WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
+        ORDER BY ip_address DESC, id ASC
       `);
 
       console.log(`Total records in node_status: ${totalRecords}`);
@@ -386,18 +395,20 @@ app.get("/active", async (req, res) => {
       let tableRows = result.rows.map(row => `
         <tr>
           <td>${row.id}</td>
+          <td>${row.ip_address}</td>
+          <td>${row.block_number}</td>
+          <td>${row.block_hash}</td>
+          <td>${new Date(row.last_checkin).toString().replace(' GMT+0000 (Coordinated Universal Time)', '')}</td>
           <td>${row.node_version}</td>
           <td>${row.execution_client}</td>
           <td>${row.consensus_client}</td>
           <td>${row.cpu_usage}</td>
           <td>${row.memory_usage}</td>
           <td>${row.storage_usage}</td>
-          <td>${row.block_number}</td>
-          <td>${row.block_hash}</td>
-          <td>${row.last_checkin}</td>
-          <td>${row.ip_address}</td>
           <td>${row.execution_peers}</td>
           <td>${row.consensus_peers}</td>
+          <td>${row.git_branch}</td>
+          <td>${row.last_commit}</td>
         </tr>
       `).join('');
 
@@ -405,24 +416,26 @@ app.get("/active", async (req, res) => {
         <html>
           <body>
             <div style='padding:20px;font-size:18px'>
-              <h1>ACTIVE NODES (Last 5 minutes)</h1>
+              <h1>ACTIVE NODES (Last ${minutes} minutes)</h1>
               <p>Total records in database: ${totalRecords}</p>
               <p>Active records: ${result.rows.length}</p>
               <table border="1" cellpadding="5">
                 <tr>
                   <th>ID</th>
+                  <th>IP Address</th>
+                  <th>Block Number</th>
+                  <th>Block Hash</th>
+                  <th>Last Checkin (UTC)</th>
                   <th>Node Version</th>
                   <th>Execution Client</th>
                   <th>Consensus Client</th>
                   <th>CPU Usage</th>
                   <th>Memory Usage</th>
                   <th>Storage Usage</th>
-                  <th>Block Number</th>
-                  <th>Block Hash</th>
-                  <th>Last Checkin</th>
-                  <th>IP Address</th>
                   <th>Execution Peers</th>
                   <th>Consensus Peers</th>
+                  <th>Git Branch</th>
+                  <th>Last Commit</th>
                 </tr>
                 ${tableRows}
               </table>
@@ -446,6 +459,104 @@ app.get("/active", async (req, res) => {
         </body>
       </html>
     `);
+  }
+});
+
+app.get("/points", async (req, res) => {
+  console.log("/POINTS", req.headers.referer);
+
+  if (!pool) {
+    return res.status(500).send("Database connection not initialized");
+  }
+
+  try {
+    const client = await pool.connect();
+    try {
+      // Query for all entries in the ip_points table
+      const result = await client.query(`
+        SELECT ip_address, points
+        FROM ip_points
+        ORDER BY points DESC
+      `);
+
+      console.log(`Total records found: ${result.rows.length}`);
+
+      let tableRows = result.rows.map(row => `
+        <tr>
+          <td>${row.ip_address}</td>
+          <td>${row.points}</td>
+        </tr>
+      `).join('');
+
+      res.send(`
+        <html>
+          <body>
+            <div style='padding:20px;font-size:18px'>
+              <h1>IP POINTS</h1>
+              <p>Total records: ${result.rows.length}</p>
+              <table border="1" cellpadding="5">
+                <tr>
+                  <th>IP Address</th>
+                  <th>Points</th>
+                </tr>
+                ${tableRows}
+              </table>
+            </div>
+          </body>
+        </html>
+      `);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving IP points:', err);
+    res.status(500).send(`
+      <html>
+        <body>
+          <div style='padding:20px;font-size:18px'>
+            <h1>ERROR RETRIEVING IP POINTS</h1>
+            <p>An error occurred while trying to retrieve IP points from the database.</p>
+            <p>Error details: ${err.message}</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+});
+
+app.get("/yourpoints", async (req, res) => {
+  console.log("/YOURPOINTS", req.headers.referer);
+
+  if (!pool) {
+    return res.status(500).json({ error: "Database connection not initialized" });
+  }
+
+  const ipAddress = req.query.ipaddress;
+
+  if (!ipAddress) {
+    return res.status(400).json({ error: "Missing required parameter: ipaddress" });
+  }
+
+  try {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT points FROM ip_points WHERE ip_address = $1',
+        [ipAddress]
+      );
+
+      if (result.rows.length > 0) {
+        const points = result.rows[0].points;
+        res.json({ ipAddress, points });
+      } else {
+        res.json({ ipAddress, points: 0 });
+      }
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving points for IP:', err);
+    res.status(500).json({ error: "An error occurred while retrieving points" });
   }
 });
 

@@ -121,6 +121,32 @@ async function createTables() {
       END $$;
     `;
 
+    const addGitBranchColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'git_branch'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN git_branch VARCHAR(255);
+        END IF; 
+      END $$;
+    `;
+
+    const addLastCommitColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'last_commit'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN last_commit VARCHAR(40);
+        END IF; 
+      END $$;
+    `;
+
     const client = await pool.connect();
     try {
       await client.query(createTableQuery);
@@ -129,6 +155,8 @@ async function createTables() {
       await client.query(addExecutionPeersColumnQuery);
       await client.query(addConsensusPeersColumnQuery);
       await client.query(removePeerCountColumnQuery);
+      await client.query(addGitBranchColumnQuery);
+      await client.query(addLastCommitColumnQuery);
       console.log("Tables created/updated successfully");
     } finally {
       client.release();
