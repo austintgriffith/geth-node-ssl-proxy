@@ -216,7 +216,7 @@ let pool;
 
 require('dotenv').config();
 
-async function initializeDbConnection() {
+async function getDbConfig() {
   const secret_name = process.env.RDS_SECRET_NAME;
   const client = new SecretsManagerClient({ 
     region: "us-east-1",
@@ -235,7 +235,7 @@ async function initializeDbConnection() {
     );
     const secret = JSON.parse(response.SecretString);
 
-    const dbConfig = {
+    return {
       host: 'bgclientdb.cluster-cjoo0gi8an8c.us-east-1.rds.amazonaws.com',
       user: secret.username,
       password: secret.password,
@@ -243,135 +243,28 @@ async function initializeDbConnection() {
       port: 5432,
       ssl: true
     };
-
-    pool = new Pool(dbConfig);
-    console.log("Database connection initialized");
   } catch (error) {
-    console.error("Error initializing database connection:", error);
+    console.error("Error fetching database secret:", error);
+    throw error;
   }
 }
 
-initializeDbConnection();
-
-app.locals.pool = pool;
-
-// app.get("/create", createRoute);
-
-app.get("/checkin", async (req, res) => {
-  let logMessages = [];
-
-  logMessages.push(`/CHECKIN ${req.headers.referer}`);
-  logMessages.push(`Request query parameters: ${JSON.stringify(req.query)}`);
-
+async function getDbPool() {
   if (!pool) {
-    logMessages.push("Database connection not initialized");
-    return res.status(500).send(logMessages.join("<br>"));
+    const dbConfig = await getDbConfig();
+    pool = new Pool(dbConfig);
   }
+  return pool;
+}
 
-  // Extract data from query parameters
-  const {
-    id,
-    node_version,
-    execution_client,
-    consensus_client,
-    cpu_usage,
-    memory_usage,
-    storage_usage,
-    block_number,
-    block_hash,
-    execution_peers,
-    consensus_peers,
-    git_branch,
-    last_commit
-  } = req.query;
+// Replace all instances of `pool.connect()` with `getDbPool()`
 
-  // Get the client's IP address
-  const ip_address = (req.ip || req.connection.remoteAddress).replace(/^::ffff:/, '');
-
-  // Validate required fields
-  if (!id) {
-    logMessages.push("Missing required parameter: id");
-    return res.status(400).send(logMessages.join("<br>"));
-  }
-
-  // Convert numeric fields and provide default values
-  const parsedCpuUsage = parseFloat(cpu_usage) || null;
-  const parsedMemoryUsage = parseFloat(memory_usage) || null;
-  const parsedStorageUsage = parseFloat(storage_usage) || null;
-  const parsedBlockNumber = block_number ? BigInt(block_number) : null;
-  const parsedExecutionPeers = parseInt(execution_peers) || null;
-  const parsedConsensusPeers = parseInt(consensus_peers) || null;
-
-  const upsertQuery = `
-    INSERT INTO node_status (
-      id, node_version, execution_client, consensus_client, 
-      cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
-      git_branch, last_commit
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14)
-    ON CONFLICT (id) DO UPDATE SET
-      node_version = EXCLUDED.node_version,
-      execution_client = EXCLUDED.execution_client,
-      consensus_client = EXCLUDED.consensus_client,
-      cpu_usage = EXCLUDED.cpu_usage,
-      memory_usage = EXCLUDED.memory_usage,
-      storage_usage = EXCLUDED.storage_usage,
-      block_number = EXCLUDED.block_number,
-      block_hash = EXCLUDED.block_hash,
-      last_checkin = CURRENT_TIMESTAMP,
-      ip_address = EXCLUDED.ip_address,
-      execution_peers = EXCLUDED.execution_peers,
-      consensus_peers = EXCLUDED.consensus_peers,
-      git_branch = EXCLUDED.git_branch,
-      last_commit = EXCLUDED.last_commit;
-  `;
-
-  try {
-    const client = await pool.connect();
-    try {
-      await client.query(upsertQuery, [
-        id, node_version, execution_client, consensus_client,
-        parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers,
-        git_branch, last_commit
-      ]);
-      logMessages.push("CHECKIN SUCCESSFUL");
-      logMessages.push(`Node status updated for ID: ${id}`);
-      logMessages.push(`IP Address: ${ip_address}`);
-      res.send(`
-        <html>
-          <body>
-            <div style='padding:20px;font-size:18px'>
-              ${logMessages.join("<br>")}
-            </div>
-          </body>
-        </html>
-      `);
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    logMessages.push('Error updating node status:', err.message);
-    res.status(500).send(`
-      <html>
-        <body>
-          <div style='padding:20px;font-size:18px'>
-            ${logMessages.join("<br>")}
-          </div>
-        </body>
-      </html>
-    `);
-  }
-});
-
+// For example, update the /active route:
 app.get("/active", async (req, res) => {
   console.log("/ACTIVE", req.headers.referer);
 
-  if (!pool) {
-    return res.status(500).send("Database connection not initialized");
-  }
-
-  const minutes = req.query.minutes ? parseInt(req.query.minutes) : 5; // Default to 5 minutes if not provided
-
   try {
+    const pool = await getDbPool();
     const client = await pool.connect();
     try {
       // First, get the total count of records
@@ -379,6 +272,7 @@ app.get("/active", async (req, res) => {
       const totalRecords = countResult.rows[0].count;
 
       // Now, query for active nodes
+      const minutes = req.query.minutes ? parseInt(req.query.minutes) : 5; // Default to 5 minutes if not provided
       const result = await client.query(`
         SELECT id, node_version, execution_client, consensus_client, 
                cpu_usage, memory_usage, storage_usage, block_number, 
@@ -462,14 +356,112 @@ app.get("/active", async (req, res) => {
   }
 });
 
+app.get("/checkin", async (req, res) => {
+  let logMessages = [];
+
+  logMessages.push(`/CHECKIN ${req.headers.referer}`);
+  logMessages.push(`Request query parameters: ${JSON.stringify(req.query)}`);
+
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      // Extract data from query parameters
+      const {
+        id,
+        node_version,
+        execution_client,
+        consensus_client,
+        cpu_usage,
+        memory_usage,
+        storage_usage,
+        block_number,
+        block_hash,
+        execution_peers,
+        consensus_peers,
+        git_branch,
+        last_commit
+      } = req.query;
+
+      // Get the client's IP address
+      const ip_address = (req.ip || req.connection.remoteAddress).replace(/^::ffff:/, '');
+
+      // Validate required fields
+      if (!id) {
+        logMessages.push("Missing required parameter: id");
+        return res.status(400).send(logMessages.join("<br>"));
+      }
+
+      // Convert numeric fields and provide default values
+      const parsedCpuUsage = parseFloat(cpu_usage) || null;
+      const parsedMemoryUsage = parseFloat(memory_usage) || null;
+      const parsedStorageUsage = parseFloat(storage_usage) || null;
+      const parsedBlockNumber = block_number ? BigInt(block_number) : null;
+      const parsedExecutionPeers = parseInt(execution_peers) || null;
+      const parsedConsensusPeers = parseInt(consensus_peers) || null;
+
+      const upsertQuery = `
+        INSERT INTO node_status (
+          id, node_version, execution_client, consensus_client, 
+          cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
+          git_branch, last_commit
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14)
+        ON CONFLICT (id) DO UPDATE SET
+          node_version = EXCLUDED.node_version,
+          execution_client = EXCLUDED.execution_client,
+          consensus_client = EXCLUDED.consensus_client,
+          cpu_usage = EXCLUDED.cpu_usage,
+          memory_usage = EXCLUDED.memory_usage,
+          storage_usage = EXCLUDED.storage_usage,
+          block_number = EXCLUDED.block_number,
+          block_hash = EXCLUDED.block_hash,
+          last_checkin = CURRENT_TIMESTAMP,
+          ip_address = EXCLUDED.ip_address,
+          execution_peers = EXCLUDED.execution_peers,
+          consensus_peers = EXCLUDED.consensus_peers,
+          git_branch = EXCLUDED.git_branch,
+          last_commit = EXCLUDED.last_commit;
+      `;
+
+      await client.query(upsertQuery, [
+        id, node_version, execution_client, consensus_client,
+        parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers,
+        git_branch, last_commit
+      ]);
+      logMessages.push("CHECKIN SUCCESSFUL");
+      logMessages.push(`Node status updated for ID: ${id}`);
+      logMessages.push(`IP Address: ${ip_address}`);
+      res.send(`
+        <html>
+          <body>
+            <div style='padding:20px;font-size:18px'>
+              ${logMessages.join("<br>")}
+            </div>
+          </body>
+        </html>
+      `);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    logMessages.push('Error updating node status:', err.message);
+    res.status(500).send(`
+      <html>
+        <body>
+          <div style='padding:20px;font-size:18px'>
+            ${logMessages.join("<br>")}
+          </div>
+        </body>
+      </html>
+    `);
+  }
+});
+
 app.get("/points", async (req, res) => {
   console.log("/POINTS", req.headers.referer);
 
-  if (!pool) {
-    return res.status(500).send("Database connection not initialized");
-  }
-
   try {
+    const pool = await getDbPool();
     const client = await pool.connect();
     try {
       // Query for all entries in the ip_points table
@@ -527,10 +519,6 @@ app.get("/points", async (req, res) => {
 app.get("/yourpoints", async (req, res) => {
   console.log("/YOURPOINTS", req.headers.referer);
 
-  if (!pool) {
-    return res.status(500).json({ error: "Database connection not initialized" });
-  }
-
   const ipAddress = req.query.ipaddress;
 
   if (!ipAddress) {
@@ -538,6 +526,7 @@ app.get("/yourpoints", async (req, res) => {
   }
 
   try {
+    const pool = await getDbPool();
     const client = await pool.connect();
     try {
       const result = await client.query(
@@ -675,11 +664,8 @@ app.get("/block", (req, res) => {
 app.get("/time", async (req, res) => {
   console.log("/TIME", req.headers.referer);
 
-  if (!pool) {
-    return res.status(500).send("Database connection not initialized");
-  }
-
   try {
+    const pool = await getDbPool();
     const client = await pool.connect();
     try {
       const result = await client.query('SELECT CURRENT_TIMESTAMP');
