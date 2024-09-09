@@ -289,7 +289,7 @@ app.get("/active", async (req, res) => {
       let tableRows = result.rows.map(row => `
         <tr>
           <td>${row.id}</td>
-          <td>${row.ip_address}</td>
+          <td><a href="https://ethernodes.org/node/${row.ip_address}" target="_blank">${row.ip_address}</a></td>
           <td>${row.block_number}</td>
           <td>${row.block_hash}</td>
           <td>${new Date(row.last_checkin).toString().replace(' GMT+0000 (Coordinated Universal Time)', '')}</td>
