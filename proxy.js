@@ -70,23 +70,23 @@ function askRandomClientForTime() {
 setInterval(askRandomClientForTime, 15000);  // Ask every client about their machine
 */
 
-app.get("/clients", (req, res) => {
-  //if(req.headers&&req.headers.referer&&req.headers.referer.indexOf("sandbox.eth.build")>=0){
-  console.log(" 🧑‍💻 clients ",connectedClients.length);
+// app.get("/clients", (req, res) => {
+//   //if(req.headers&&req.headers.referer&&req.headers.referer.indexOf("sandbox.eth.build")>=0){
+//   console.log(" 🧑‍💻 clients ",connectedClients.length);
 
-  let clientDisplay = connectedClients.map(client => {
-    return "<div style='padding:10px;font-size:18px'> "+client.ip+" <pre>"+JSON.stringify(client.machineInfo)+"</pre></div>"
-  }).join("")
+//   let clientDisplay = connectedClients.map(client => {
+//     return "<div style='padding:10px;font-size:18px'> "+client.ip+" <pre>"+JSON.stringify(client.machineInfo)+"</pre></div>"
+//   }).join("")
 
 
-  res.send(
-    "<html><body><div style='padding:20px;font-size:18px'><H1>CLIENTS</H1></div><pre>" +
-    connectedClients.length +
-      "</pre>"+clientDisplay+"</body></html>"
-  );
+//   res.send(
+//     "<html><body><div style='padding:20px;font-size:18px'><H1>CLIENTS</H1></div><pre>" +
+//     connectedClients.length +
+//       "</pre>"+clientDisplay+"</body></html>"
+//   );
    
-  //JSON.stringify(sortable)
-});
+//   //JSON.stringify(sortable)
+// });
 
 
 
@@ -267,6 +267,15 @@ app.get("/active", async (req, res) => {
     const pool = await getDbPool();
     const client = await pool.connect();
     try {
+      // Add this query at the beginning of the /active route:
+      const schemaQuery = `
+        SELECT column_name, data_type, character_maximum_length
+        FROM information_schema.columns
+        WHERE table_name = 'node_status' AND column_name = 'peerid';
+      `;
+      const schemaResult = await client.query(schemaQuery);
+      console.log('peerID column schema:', schemaResult.rows[0]);
+
       // First, get the total count of records
       const countResult = await client.query('SELECT COUNT(*) FROM node_status');
       const totalRecords = countResult.rows[0].count;
@@ -277,7 +286,9 @@ app.get("/active", async (req, res) => {
         SELECT id, node_version, execution_client, consensus_client, 
                cpu_usage, memory_usage, storage_usage, block_number, 
                block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
-               git_branch, last_commit
+               git_branch, last_commit, commit_hash, enode, 
+               COALESCE(peerid, 'NULL_VALUE') as peerid,
+               consensus_tcp_port, consensus_udp_port, enr
         FROM node_status
         WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
         ORDER BY ip_address DESC, id ASC
@@ -285,6 +296,9 @@ app.get("/active", async (req, res) => {
 
       console.log(`Total records in node_status: ${totalRecords}`);
       console.log(`Active records found: ${result.rows.length}`);
+
+      // After executing the query, log the peerID values:
+      console.log('PeerID values:', result.rows.map(row => ({ id: row.id, peerid: row.peerid })));
 
       let tableRows = result.rows.map(row => `
         <tr>
@@ -303,6 +317,12 @@ app.get("/active", async (req, res) => {
           <td>${row.consensus_peers}</td>
           <td>${row.git_branch}</td>
           <td>${row.last_commit}</td>
+          <td><a href="https://github.com/BuidlGuidl/buidlguidl-client/commit/${row.commit_hash}" target="_blank">${row.commit_hash}</a></td>
+          <td>${row.enode}</td>
+          <td>${row.peerid === 'NULL_VALUE' ? 'null' : row.peerid}</td>
+          <td>${row.consensus_tcp_port === 'NULL_VALUE' ? 'null' : row.consensus_tcp_port}</td>
+          <td>${row.consensus_udp_port === 'NULL_VALUE' ? 'null' : row.consensus_udp_port}</td>
+          <td>${row.enr === 'NULL_VALUE' ? 'null' : row.enr}</td>
         </tr>
       `).join('');
 
@@ -330,6 +350,12 @@ app.get("/active", async (req, res) => {
                   <th>Consensus Peers</th>
                   <th>Git Branch</th>
                   <th>Last Commit</th>
+                  <th>Commit Hash</th>
+                  <th>Enode (execution)</th>
+                  <th>Peer ID (consensus)</th>
+                  <th>Consensus TCP Port</th>
+                  <th>Consensus UDP Port</th>
+                  <th>ENR (consensus)</th>
                 </tr>
                 ${tableRows}
               </table>
@@ -380,8 +406,23 @@ app.get("/checkin", async (req, res) => {
         execution_peers,
         consensus_peers,
         git_branch,
-        last_commit
+        last_commit,
+        commit_hash,
+        enode,
+        peerid,
+        consensus_tcp_port,
+        consensus_udp_port,
+        enr  // Add this line to extract the enr parameter
       } = req.query;
+
+      console.log('Raw peerid:', peerid);
+      console.log('Raw enr:', enr);  // Add this line to log the raw enr
+
+      // Decode peerid and enr
+      const decodedPeerID = peerid ? decodeURIComponent(peerid) : null;
+      const decodedENR = enr ? decodeURIComponent(enr) : null;  // Add this line to decode the enr
+      console.log('Decoded peerID:', decodedPeerID);
+      console.log('Decoded ENR:', decodedENR);  // Add this line to log the decoded enr
 
       // Get the client's IP address
       const ip_address = (req.ip || req.connection.remoteAddress).replace(/^::ffff:/, '');
@@ -399,13 +440,15 @@ app.get("/checkin", async (req, res) => {
       const parsedBlockNumber = block_number ? BigInt(block_number) : null;
       const parsedExecutionPeers = parseInt(execution_peers) || null;
       const parsedConsensusPeers = parseInt(consensus_peers) || null;
+      const parsedConsensusTcpPort = parseInt(consensus_tcp_port) || null;
+      const parsedConsensusUdpPort = parseInt(consensus_udp_port) || null;
 
       const upsertQuery = `
         INSERT INTO node_status (
           id, node_version, execution_client, consensus_client, 
           cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
-          git_branch, last_commit
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14)
+          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
         ON CONFLICT (id) DO UPDATE SET
           node_version = EXCLUDED.node_version,
           execution_client = EXCLUDED.execution_client,
@@ -420,17 +463,40 @@ app.get("/checkin", async (req, res) => {
           execution_peers = EXCLUDED.execution_peers,
           consensus_peers = EXCLUDED.consensus_peers,
           git_branch = EXCLUDED.git_branch,
-          last_commit = EXCLUDED.last_commit;
+          last_commit = EXCLUDED.last_commit,
+          commit_hash = EXCLUDED.commit_hash,
+          enode = EXCLUDED.enode,
+          peerid = EXCLUDED.peerid,
+          consensus_tcp_port = EXCLUDED.consensus_tcp_port,
+          consensus_udp_port = EXCLUDED.consensus_udp_port,
+          enr = EXCLUDED.enr;
       `;
 
-      await client.query(upsertQuery, [
+      const queryParams = [
         id, node_version, execution_client, consensus_client,
         parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers,
-        git_branch, last_commit
-      ]);
+        git_branch, last_commit, commit_hash, enode, decodedPeerID, parsedConsensusTcpPort, parsedConsensusUdpPort, decodedENR
+      ];
+
+      console.log('Query parameters:', queryParams);
+
+      const result = await client.query(upsertQuery, queryParams);
+      console.log('Upsert result:', result);
+      logMessages.push(`Rows affected: ${result.rowCount}`);
+
+      // Add this query to check the stored value immediately after the upsert
+      const checkQuery = 'SELECT peerid, consensus_tcp_port, consensus_udp_port, enr FROM node_status WHERE id = $1';
+      const checkResult = await client.query(checkQuery, [id]);
+      console.log('Stored values:', checkResult.rows[0]);
+
       logMessages.push("CHECKIN SUCCESSFUL");
       logMessages.push(`Node status updated for ID: ${id}`);
       logMessages.push(`IP Address: ${ip_address}`);
+      logMessages.push(`peerid: ${decodedPeerID}`);
+      logMessages.push(`Consensus TCP Port: ${parsedConsensusTcpPort}`);
+      logMessages.push(`Consensus UDP Port: ${parsedConsensusUdpPort}`);
+      logMessages.push(`ENR: ${decodedENR}`);
+
       res.send(`
         <html>
           <body>
@@ -444,6 +510,7 @@ app.get("/checkin", async (req, res) => {
       client.release();
     }
   } catch (err) {
+    console.error('Error in /checkin:', err);
     logMessages.push('Error updating node status:', err.message);
     res.status(500).send(`
       <html>
@@ -695,6 +762,150 @@ app.get("/time", async (req, res) => {
         </body>
       </html>
     `);
+  }
+});
+
+app.get("/enodes", async (req, res) => {
+  console.log("/ENODES", req.headers.referer);
+
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT 
+          enode,
+          CASE 
+            WHEN execution_client LIKE 'reth%' THEN 'reth'
+            WHEN execution_client LIKE 'geth%' THEN 'geth'
+            ELSE SPLIT_PART(execution_client, ' ', 1)
+          END AS execution_client
+        FROM node_status
+        WHERE enode IS NOT NULL 
+          AND enode != ''
+          AND last_checkin > NOW() - INTERVAL '5 minutes'
+      `);
+
+      const enodes = result.rows.map(row => ({
+        enode: row.enode,
+        executionClient: row.execution_client
+      }));
+
+      res.json({ enodes });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving enodes:', err);
+    res.status(500).json({ error: "An error occurred while retrieving enodes" });
+  }
+});
+
+app.get("/consensusPeerAddr", async (req, res) => {
+  console.log("/CONSENSUS_PEER_ADDR", req.headers.referer);
+
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT 
+          id,
+          ip_address,
+          consensus_tcp_port,
+          consensus_udp_port,
+          peerid,
+          SPLIT_PART(consensus_client, ' ', 1) AS consensus_client,
+          enr
+        FROM node_status
+        WHERE peerid IS NOT NULL 
+          AND peerid != ''
+          AND peerid != 'null'
+          AND ip_address IS NOT NULL
+          AND consensus_tcp_port IS NOT NULL
+          AND consensus_udp_port IS NOT NULL
+          AND last_checkin > NOW() - INTERVAL '5 minutes'
+      `);
+
+      const consensusPeerAddrs = result.rows.reduce((acc, row) => {
+        const clientType = row.consensus_client.toLowerCase();
+        let consensusPeerAddr;
+
+        if (clientType === "lighthouse") {
+          consensusPeerAddr = `/ip4/${row.ip_address}/tcp/${row.consensus_tcp_port}/p2p/${row.peerid},/ip4/${row.ip_address}/udp/${row.consensus_udp_port}/quic-v1/p2p/${row.peerid}`;
+        } else if (clientType === "prysm") {
+          if (row.enr && row.enr !== '' && row.enr !== 'null') {
+            consensusPeerAddr = row.enr;
+          } else {
+            return acc; // Skip this row if ENR is not valid
+          }
+        } else {
+          // Default format for other clients
+          consensusPeerAddr = `/ip4/${row.ip_address}/tcp/${row.consensus_tcp_port}/p2p/${row.peerid},/ip4/${row.ip_address}/udp/${row.consensus_udp_port}/quic-v1/p2p/${row.peerid}`;
+        }
+
+        acc.push({
+          machineID: row.id,
+          consensusPeerAddr: consensusPeerAddr,
+          consensusClient: clientType
+        });
+
+        return acc;
+      }, []);
+
+      res.json({ consensusPeerAddrs });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving consensus peer addresses:', err);
+    res.status(500).json({ error: "An error occurred while retrieving consensus peer addresses" });
+  }
+});
+
+app.get("/peerids", async (req, res) => {
+  console.log("/PEERIDS", req.headers.referer);
+
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT 
+          peerid,
+          enode,
+          CASE 
+            WHEN consensus_client LIKE 'lighthouse%' THEN 'lighthouse'
+            WHEN consensus_client LIKE 'prysm%' THEN 'prysm'
+            ELSE SPLIT_PART(consensus_client, ' ', 1)
+          END AS consensus_client
+        FROM node_status
+        WHERE peerid IS NOT NULL 
+          AND peerid != ''
+          AND enode IS NOT NULL
+          AND enode != ''
+          AND last_checkin > NOW() - INTERVAL '5 minutes'
+      `);
+
+      const peerids = result.rows.map(row => {
+        // Extract IP:Port from enode
+        const enodeMatch = row.enode.match(/@([^:]+):(\d+)/);
+        const ipPort = enodeMatch ? `${enodeMatch[1]}:${enodeMatch[2]}` : null;
+
+        return {
+          peerid: row.peerid,
+          ipPort: ipPort,
+          consensusClient: row.consensus_client
+        };
+      });
+
+      res.json({ peerids });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving peerids:', err);
+    res.status(500).json({ error: "An error occurred while retrieving peerids" });
   }
 });
 

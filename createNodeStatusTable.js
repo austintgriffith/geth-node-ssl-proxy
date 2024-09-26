@@ -2,6 +2,19 @@ const { Pool } = require('pg');
 const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
 require('dotenv').config();
 
+const removeMultiAddrColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'multi_addr'
+    ) THEN 
+      ALTER TABLE node_status 
+      DROP COLUMN multi_addr;
+    END IF; 
+  END $$;
+`;
+
 async function createTables() {
   console.log("Creating/updating tables...");
 
@@ -15,6 +28,7 @@ async function createTables() {
   });
 
   let pool;
+  let client;
 
   try {
     const response = await secretsClient.send(
@@ -147,7 +161,111 @@ async function createTables() {
       END $$;
     `;
 
-    const client = await pool.connect();
+    const addCommitHashColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'commit_hash'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN commit_hash VARCHAR(40);
+        END IF; 
+      END $$;
+    `;
+
+    const addEnodeColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'enode'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN enode VARCHAR(255);
+        END IF; 
+      END $$;
+    `;
+
+    const addPeerIDColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'peerid'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN peerID VARCHAR(255);
+        END IF; 
+      END $$;
+    `;
+
+    const addConsensusTcpPortColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'consensus_tcp_port'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN consensus_tcp_port INTEGER;
+        END IF; 
+      END $$;
+    `;
+
+    const addConsensusUdpPortColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'consensus_udp_port'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN consensus_udp_port INTEGER;
+        END IF; 
+      END $$;
+    `;
+
+    const addMultiAddrColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'multi_addr'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN multi_addr TEXT;
+        END IF; 
+      END $$;
+    `;
+
+    const removeMultiAddrColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'multi_addr'
+        ) THEN 
+          ALTER TABLE node_status 
+          DROP COLUMN multi_addr;
+        END IF; 
+      END $$;
+    `;
+
+    const addEnrColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'enr'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN enr TEXT;
+        END IF; 
+      END $$;
+    `;
+
+    client = await pool.connect();
     try {
       await client.query(createTableQuery);
       await client.query(addLastCheckinColumnQuery);
@@ -157,6 +275,23 @@ async function createTables() {
       await client.query(removePeerCountColumnQuery);
       await client.query(addGitBranchColumnQuery);
       await client.query(addLastCommitColumnQuery);
+      await client.query(addCommitHashColumnQuery);
+      await client.query(addEnodeColumnQuery);
+      await client.query(addPeerIDColumnQuery);
+      await client.query(addConsensusTcpPortColumnQuery);
+      await client.query(addConsensusUdpPortColumnQuery);
+      await client.query(removeMultiAddrColumnQuery);
+      await client.query(addEnrColumnQuery);  // Add this line
+
+      const checkColumnQuery = `
+        SELECT column_name, data_type, character_maximum_length
+        FROM information_schema.columns
+        WHERE table_name = 'node_status' AND column_name = 'peerid';
+      `;
+
+      const checkColumnResult = await client.query(checkColumnQuery);
+      console.log('Existing peerID column:', checkColumnResult.rows[0]);
+
       console.log("Tables created/updated successfully");
     } finally {
       client.release();
