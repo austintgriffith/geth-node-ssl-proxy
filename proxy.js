@@ -6,16 +6,21 @@ const fs = require("fs");
 var cors = require("cors");
 var bodyParser = require("body-parser");
 var app = express();
-const ethers = require("ethers");
-https.globalAgent.options.ca = require("ssl-root-cas").create();
-process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
-const { forEach } = require("ssl-root-cas");
 const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
 const { Pool } = require('pg');
-const createRoute = require('./createNodeStatusTable');
+const { createPublicClient, http } = require('viem');
+const { mainnet } = require('viem/chains');
 
+const localProviderUrl = "https://office.buidlguidl.com:48544/";
 
-const localProviderUrl = "http://localhost:48545";
+const client = createPublicClient({
+  chain: mainnet,
+  transport: http(localProviderUrl)
+});
+
+https.globalAgent.options.ca = require("ssl-root-cas").create();
+process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
+
 app.use(bodyParser.json());
 app.use(cors());
 //app.use(express.json())
@@ -46,6 +51,35 @@ setInterval(()=>{
 
 const targetUrl = "https://office.buidlguidl.com:48544";
 
+let fallbackUrl = "";
+
+const checkForFallback = async () => {
+  console.log("Checking for fallback URL...");
+
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      const minutes = 5; // Set to 5 minutes
+      const result = await client.query(`
+        SELECT id, block_number
+        FROM node_status
+        WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
+        ORDER BY block_number DESC
+      `);
+
+      console.log(`Active nodes in the last ${minutes} minutes:`);
+      result.rows.forEach(row => {
+        console.log(`ID: ${row.id}, Block Number: ${row.block_number}`);
+      });
+
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error checking for fallback:', err);
+  }
+}
 
 app.post("/", (req, res) => {
   if (req.headers && req.headers.referer) {
@@ -587,69 +621,80 @@ app.get("/letathousandscaffoldethsbloom", (req, res) => {
   );
 });
 
-app.get("/sync", (req, res) => {
-  //if(req.headers&&req.headers.referer&&req.headers.referer.indexOf("sandbox.eth.build")>=0){
+app.get("/sync", async (req, res) => {
   console.log(" 🏷 sync ");
 
-  let localProvider = new ethers.providers.JsonRpcProvider(localProviderUrl);
-
-  localProvider.send("eth_syncing").then(
-    (a, b) => {
-      console.log("DONE", a, b, a.currentBlock);
-      if (a === "false") {
-        let currentBlock = ethers.BigNumber.from("" + a.currentBlock);
-        console.log("currentBlock", currentBlock);
-        res.send(
-          "<html><body><div style='padding:20px;font-size:18px'><H1>SYNCING</H1></div><pre>" +
-            JSON.stringify(a) +
-            "</pre><div>currentBlock</div><b>" +
-            currentBlock.toNumber() +
-            "</b></body></html>"
-        );
-      } else {
-        res.send(
-          "<html><body><div style='padding:20px;font-size:18px'><H1 style=\"color:green;\">IN SYNC!</H1></div><pre></pre></body></html>"
-        );
-      }
-    },
-    (a, b) => {
-      console.log("REJECT", a, b);
-      res.send(
-        "<html><body><div style='padding:20px;font-size:18px'><H1>SYNC REJECT</H1></div><pre></pre></body></html>"
-      );
+  try {
+    const syncStatus = await client.request({ method: 'eth_syncing' });
+    
+    if (syncStatus === false) {
+      res.send(`
+        <html>
+          <body>
+            <div style='padding:20px;font-size:18px'>
+              <H1 style="color:green;">IN SYNC!</H1>
+            </div>
+          </body>
+        </html>
+      `);
+    } else {
+      const currentBlock = BigInt(syncStatus.currentBlock);
+      res.send(`
+        <html>
+          <body>
+            <div style='padding:20px;font-size:18px'>
+              <H1>SYNCING</H1>
+            </div>
+            <pre>${JSON.stringify(syncStatus, null, 2)}</pre>
+            <div>currentBlock</div>
+            <b>${currentBlock.toString()}</b>
+          </body>
+        </html>
+      `);
     }
-  );
-
-  //JSON.stringify(sortable)
+  } catch (error) {
+    console.error("SYNC ERROR", error);
+    res.status(500).send(`
+      <html>
+        <body>
+          <div style='padding:20px;font-size:18px'>
+            <H1>SYNC ERROR</H1>
+          </div>
+          <pre>${error.message}</pre>
+        </body>
+      </html>
+    `);
+  }
 });
 
-
-app.get("/block", (req, res) => {
-  //if(req.headers&&req.headers.referer&&req.headers.referer.indexOf("sandbox.eth.build")>=0){
+app.get("/block", async (req, res) => {
   console.log(" 🛰 block ");
 
-  let localProvider = new ethers.providers.JsonRpcProvider(localProviderUrl);
-
-  localProvider.getBlockNumber().then(
-    (a, b) => {
-      console.log("DONE", a, b);
-      res.send(
-        "<html><body><div style='padding:20px;font-size:18px'><H1>BLOCK</H1></div><pre>" +
-          a +
-          "</pre></body></html>"
-      );
-    },
-    (a, b) => {
-      console.log("REJECT", a, b);
-      res.send(
-        "<html><body><div style='padding:20px;font-size:18px'><H1>BLOCK REJECT!!!!!!!</H1></div><pre>" +
-          a +
-          "</pre></body></html>"
-      );
-    }
-  );
-
-  //JSON.stringify(sortable)
+  try {
+    const blockNumber = await client.getBlockNumber();
+    res.send(`
+      <html>
+        <body>
+          <div style='padding:20px;font-size:18px'>
+            <H1>BLOCK</H1>
+          </div>
+          <pre>${blockNumber}</pre>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error("BLOCK ERROR", error);
+    res.status(500).send(`
+      <html>
+        <body>
+          <div style='padding:20px;font-size:18px'>
+            <H1>BLOCK ERROR</H1>
+          </div>
+          <pre>${error.message}</pre>
+        </body>
+      </html>
+    `);
+  }
 });
 
 app.get("/time", async (req, res) => {
@@ -844,3 +889,8 @@ https
   .listen(48544, () => {
     console.log("Listening 48544...");
   });
+
+
+  
+  setInterval(checkForFallback, 5000);
+  checkForFallback();
