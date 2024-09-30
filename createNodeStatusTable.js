@@ -15,6 +15,19 @@ const removeMultiAddrColumnQuery = `
   END $$;
 `;
 
+const addSocketIdColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'socket_id'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN socket_id VARCHAR(255);
+    END IF; 
+  END $$;
+`;
+
 async function createTables() {
   console.log("Creating/updating tables...");
 
@@ -281,7 +294,8 @@ async function createTables() {
       await client.query(addConsensusTcpPortColumnQuery);
       await client.query(addConsensusUdpPortColumnQuery);
       await client.query(removeMultiAddrColumnQuery);
-      await client.query(addEnrColumnQuery);  // Add this line
+      await client.query(addEnrColumnQuery);
+      await client.query(addSocketIdColumnQuery);  // Add this line
 
       const checkColumnQuery = `
         SELECT column_name, data_type, character_maximum_length

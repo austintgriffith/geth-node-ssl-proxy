@@ -10,6 +10,11 @@ const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client
 const { Pool } = require('pg');
 const { createPublicClient, http } = require('viem');
 const { mainnet } = require('viem/chains');
+const WebSocket = require('ws');
+const { v4: uuidv4 } = require('uuid');  // Optional for generating a unique ID
+const EventEmitter = require('events');
+EventEmitter.defaultMaxListeners = 20; // Increase the default max listeners
+
 
 const localProviderUrl = "https://office.buidlguidl.com:48544/";
 
@@ -54,7 +59,7 @@ const targetUrl = "https://office.buidlguidl.com:48544";
 let fallbackUrl = "";
 
 const checkForFallback = async () => {
-  console.log("Checking for fallback URL...");
+  // console.log("Checking for fallback URL...");
 
   try {
     const pool = await getDbPool();
@@ -68,10 +73,10 @@ const checkForFallback = async () => {
         ORDER BY block_number DESC
       `);
 
-      console.log(`Active nodes in the last ${minutes} minutes:`);
-      result.rows.forEach(row => {
-        console.log(`ID: ${row.id}, Block Number: ${row.block_number}`);
-      });
+      // console.log(`Active nodes in the last ${minutes} minutes:`);
+      // result.rows.forEach(row => {
+      //   console.log(`ID: ${row.id}, Block Number: ${row.block_number}`);
+      // });
 
     } finally {
       client.release();
@@ -81,7 +86,69 @@ const checkForFallback = async () => {
   }
 }
 
-app.post("/", (req, res) => {
+async function getFilteredConnectedClients() {
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      const minutes = 5; // Default to 5 minutes
+      const result = await client.query(`
+        SELECT id, block_number, last_checkin, socket_id
+        FROM node_status
+        WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
+        ORDER BY block_number DESC
+      `);
+      
+      // Find the largest block number
+      const largestBlockNumber = result.rows.reduce((max, row) => 
+        row.block_number > max ? row.block_number : max, 0);
+
+      console.log("LARGEST BLOCK NUMBER", largestBlockNumber.toString());
+
+      // Filter rows with the largest block number
+      const filteredRows = result.rows.filter(row => row.block_number === largestBlockNumber);
+
+      console.log("FILTERED ROWS", filteredRows);
+      
+      // Log connected clients in more detail
+      console.log("CONNECTED CLIENTS:", Array.from(connectedClients).map(client => ({
+        clientID: client.clientID,
+        ws: client.ws ? 'WebSocket Present' : 'No WebSocket'
+      })));
+
+      // Create a Map of filtered clients
+      const filteredClients = new Map();
+      filteredRows.forEach(row => {
+        console.log(`Checking row with socket_id: ${row.socket_id}`);
+        if (row.socket_id) {
+          const matchingClient = Array.from(connectedClients).find(client => {
+            console.log(`Comparing: ${client.clientID} with ${row.socket_id}`);
+            return client.clientID === row.socket_id;
+          });
+          if (matchingClient) {
+            console.log(`Found matching client for socket_id: ${row.socket_id}`);
+            filteredClients.set(row.socket_id, {...matchingClient, nodeStatusId: row.id});  // Include nodeStatusId
+          } else {
+            console.log(`No matching client found for socket_id: ${row.socket_id}`);
+            console.log(`Available client IDs: ${Array.from(connectedClients).map(c => c.clientID).join(', ')}`);
+          }
+        }
+      });
+
+      console.log(`Total active clients: ${result.rows.length}`);
+      console.log(`Clients at latest block ${largestBlockNumber}: ${filteredClients.size}`);
+
+      return filteredClients;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error in getFilteredConnectedClients:', err);
+    return new Map(); // Return an empty Map in case of error
+  }
+}
+
+app.post("/", async (req, res) => {
   if (req.headers && req.headers.referer) {
     if (last === req.connection.remoteAddress) {
       //process.stdout.write(".");
@@ -118,23 +185,79 @@ app.post("/", (req, res) => {
       ? methodsByReferer[req.headers.referer][req.body.method]++
       : (methodsByReferer[req.headers.referer][req.body.method] = 1);
   }
-  axios
-    .post(targetUrl, req.body, {
-      headers: {
-        "Content-Type": "application/json",
-        ...req.headers,
-      },
-    })
-    .then((response) => {
-      console.log("POST RESPONSE", response.data);
-      res.status(response.status).send(response.data);
-    })
-    .catch((error) => {
-      console.log("POST ERROR", error);
-      res
-        .status(error.response ? error.response.status : 500)
-        .send(error.message);
+
+
+console.log("📡 RPC REQUEST", req.body);
+console.log("Connected WebSocket clients:", listConnectedClients());
+
+
+const filteredConnectedClients = await getFilteredConnectedClients();
+
+console.log("Filtered connected clients:", filteredConnectedClients);
+
+
+if(filteredConnectedClients.size > 0) {
+  console.log("CLIENTS CONNECTED, sending to random client")
+
+  // Convert the Map to an array and select a random client
+  const clientsArray = Array.from(filteredConnectedClients.values());
+  const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
+
+  if (randomClient && randomClient.ws) {
+    console.log("Sending RPC call to client with socketID:", randomClient.clientID, "and node_status id:", randomClient.nodeStatusId);
+    // Create a promise to handle the WebSocket message
+    const messagePromise = new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        randomClient.ws.removeListener('message', handleMessage);
+        reject(new Error('WebSocket message timeout'));
+      }, 10000); // 10 second timeout
+
+      function handleMessage(message) {
+        clearTimeout(timeoutId);
+        randomClient.ws.removeListener('message', handleMessage);
+        resolve(message);
+      }
+
+      randomClient.ws.once('message', handleMessage);
     });
+
+    try {
+      // Send the message
+      randomClient.ws.send(JSON.stringify(req.body));
+
+      // Wait for the response
+      const message = await messagePromise;
+      console.log("🛰️ RPC RESPONSE", message);
+      res.send(message);
+    } catch (error) {
+      console.error("WebSocket error:", error);
+      res.status(500).send("Error communicating with WebSocket client");
+    }
+  } else {
+    console.log("Selected client is invalid or has no WebSocket connection");
+    res.status(500).send("No valid client available");
+  }
+} else {
+  console.log("NO CLIENTS CONNECTED, proxy to the office")
+  axios
+  .post(targetUrl, req.body, {
+    headers: {
+      "Content-Type": "application/json",
+      ...req.headers,
+    },
+  })
+  .then((response) => {
+    console.log("POST RESPONSE", response.data);
+    res.status(response.status).send(response.data);
+  })
+  .catch((error) => {
+    console.log("POST ERROR", error);
+    res
+      .status(error.response ? error.response.status : 500)
+      .send(error.message);
+  });
+}
+
 
   console.log("POST SERVED", req.body);
 });
@@ -219,7 +342,7 @@ async function getDbPool() {
 
 // For example, update the /active route:
 app.get("/active", async (req, res) => {
-  console.log("/ACTIVE", req.headers.referer);
+  //console.log("/ACTIVE", req.headers.referer);
 
   try {
     const pool = await getDbPool();
@@ -232,7 +355,7 @@ app.get("/active", async (req, res) => {
         WHERE table_name = 'node_status' AND column_name = 'peerid';
       `;
       const schemaResult = await client.query(schemaQuery);
-      console.log('peerID column schema:', schemaResult.rows[0]);
+      //console.log('peerID column schema:', schemaResult.rows[0]);
 
       // First, get the total count of records
       const countResult = await client.query('SELECT COUNT(*) FROM node_status');
@@ -246,17 +369,17 @@ app.get("/active", async (req, res) => {
                block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
                git_branch, last_commit, commit_hash, enode, 
                COALESCE(peerid, 'NULL_VALUE') as peerid,
-               consensus_tcp_port, consensus_udp_port, enr
+               consensus_tcp_port, consensus_udp_port, enr, socket_id
         FROM node_status
         WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
         ORDER BY ip_address DESC, id ASC
       `);
 
-      console.log(`Total records in node_status: ${totalRecords}`);
-      console.log(`Active records found: ${result.rows.length}`);
+      //console.log(`Total records in node_status: ${totalRecords}`);
+      //console.log(`Active records found: ${result.rows.length}`);
 
       // After executing the query, log the peerID values:
-      console.log('PeerID values:', result.rows.map(row => ({ id: row.id, peerid: row.peerid })));
+      //console.log('PeerID values:', result.rows.map(row => ({ id: row.id, peerid: row.peerid })));
 
       let tableRows = result.rows.map(row => `
         <tr>
@@ -281,6 +404,7 @@ app.get("/active", async (req, res) => {
           <td>${row.consensus_tcp_port === 'NULL_VALUE' ? 'null' : row.consensus_tcp_port}</td>
           <td>${row.consensus_udp_port === 'NULL_VALUE' ? 'null' : row.consensus_udp_port}</td>
           <td>${row.enr === 'NULL_VALUE' ? 'null' : row.enr}</td>
+          <td>${row.socket_id === 'NULL_VALUE' ? 'null' : row.socket_id}</td>
         </tr>
       `).join('');
 
@@ -314,6 +438,7 @@ app.get("/active", async (req, res) => {
                   <th>Consensus TCP Port</th>
                   <th>Consensus UDP Port</th>
                   <th>ENR (consensus)</th>
+                  <th>Socket ID</th>
                 </tr>
                 ${tableRows}
               </table>
@@ -349,6 +474,7 @@ app.get("/checkin", async (req, res) => {
   try {
     const pool = await getDbPool();
     const client = await pool.connect();
+    //console.log('🚀 🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀');
     try {
       // Extract data from query parameters
       const {
@@ -370,17 +496,18 @@ app.get("/checkin", async (req, res) => {
         peerid,
         consensus_tcp_port,
         consensus_udp_port,
-        enr  // Add this line to extract the enr parameter
+        enr,  // Add this line to extract the enr parameter
+        socket_id
       } = req.query;
 
-      console.log('Raw peerid:', peerid);
-      console.log('Raw enr:', enr);  // Add this line to log the raw enr
+      //console.log('Raw peerid:', peerid);
+      //console.log('Raw enr:', enr);  // Add this line to log the raw enr
 
       // Decode peerid and enr
       const decodedPeerID = peerid ? decodeURIComponent(peerid) : null;
       const decodedENR = enr ? decodeURIComponent(enr) : null;  // Add this line to decode the enr
-      console.log('Decoded peerID:', decodedPeerID);
-      console.log('Decoded ENR:', decodedENR);  // Add this line to log the decoded enr
+      //console.log('Decoded peerID:', decodedPeerID);
+      //console.log('Decoded ENR:', decodedENR);  // Add this line to log the decoded enr
 
       // Get the client's IP address
       const ip_address = (req.ip || req.connection.remoteAddress).replace(/^::ffff:/, '');
@@ -405,8 +532,8 @@ app.get("/checkin", async (req, res) => {
         INSERT INTO node_status (
           id, node_version, execution_client, consensus_client, 
           cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
-          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
         ON CONFLICT (id) DO UPDATE SET
           node_version = EXCLUDED.node_version,
           execution_client = EXCLUDED.execution_client,
@@ -427,25 +554,26 @@ app.get("/checkin", async (req, res) => {
           peerid = EXCLUDED.peerid,
           consensus_tcp_port = EXCLUDED.consensus_tcp_port,
           consensus_udp_port = EXCLUDED.consensus_udp_port,
-          enr = EXCLUDED.enr;
+          enr = EXCLUDED.enr,
+          socket_id = EXCLUDED.socket_id;
       `;
 
       const queryParams = [
         id, node_version, execution_client, consensus_client,
         parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers,
-        git_branch, last_commit, commit_hash, enode, decodedPeerID, parsedConsensusTcpPort, parsedConsensusUdpPort, decodedENR
+        git_branch, last_commit, commit_hash, enode, decodedPeerID, parsedConsensusTcpPort, parsedConsensusUdpPort, decodedENR, socket_id
       ];
 
-      console.log('Query parameters:', queryParams);
+      //console.log('Query parameters:', queryParams);
 
       const result = await client.query(upsertQuery, queryParams);
-      console.log('Upsert result:', result);
+      //console.log('Upsert result:', result);
       logMessages.push(`Rows affected: ${result.rowCount}`);
 
       // Add this query to check the stored value immediately after the upsert
-      const checkQuery = 'SELECT peerid, consensus_tcp_port, consensus_udp_port, enr FROM node_status WHERE id = $1';
+      const checkQuery = 'SELECT peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id FROM node_status WHERE id = $1';
       const checkResult = await client.query(checkQuery, [id]);
-      console.log('Stored values:', checkResult.rows[0]);
+      //console.log('Stored values:', checkResult.rows[0]);
 
       logMessages.push("CHECKIN SUCCESSFUL");
       logMessages.push(`Node status updated for ID: ${id}`);
@@ -454,6 +582,7 @@ app.get("/checkin", async (req, res) => {
       logMessages.push(`Consensus TCP Port: ${parsedConsensusTcpPort}`);
       logMessages.push(`Consensus UDP Port: ${parsedConsensusUdpPort}`);
       logMessages.push(`ENR: ${decodedENR}`);
+      logMessages.push(`Socket ID: ${socket_id}`);
 
       res.send(`
         <html>
@@ -734,6 +863,77 @@ app.get("/time", async (req, res) => {
   }
 });
 
+const httpsPort = 48544;
+
+// Create the HTTPS server
+const server = https.createServer(
+  {
+    key: fs.readFileSync("server.key"),
+    cert: fs.readFileSync("server.cert"),
+  },
+  app
+);
+
+// Create a WebSocket server attached to the HTTPS server
+const wss = new WebSocket.Server({ server });
+
+const connectedClients = new Set();
+
+// WebSocket connection handler
+wss.on('connection', (ws) => {
+  console.log('WebSocket client connected');
+
+  // Use uuidv4 to generate a unique ID for the client
+  const clientID = uuidv4();
+  console.log(`Client ID: ${clientID}`);
+
+  connectedClients.add({ws, clientID});
+  // Send the id to the client 
+  ws.send(JSON.stringify({id: clientID}));
+
+  // Set up a ping-pong mechanism
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+
+  ws.on('ping', () => {
+    ws.pong();
+  });
+
+  ws.on('close', () => {
+    console.log('WebSocket client disconnected');
+    connectedClients.delete(ws);
+  });
+});
+
+// Set up an interval to check for dead connections
+const interval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      console.log('Terminating inactive WebSocket connection');
+      return ws.terminate();
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+
+wss.on('close', () => {
+  clearInterval(interval);
+});
+
+function listConnectedClients() {
+  return Array.from(connectedClients).map((client, index) => {
+    return `Client ${index + 1}: (${client.clientID}) ${client.ws._socket.remoteAddress}:${client.ws._socket.remotePort}`;
+  });
+}
+
+// Start the HTTPS server (which now includes WebSocket)
+server.listen(httpsPort, () => {
+  console.log(`HTTPS and WebSocket server listening on port ${httpsPort}...`);
+});
+
 app.get("/enodes", async (req, res) => {
   console.log("/ENODES", req.headers.referer);
 
@@ -878,19 +1078,5 @@ app.get("/peerids", async (req, res) => {
   }
 });
 
-https
-  .createServer(
-    {
-      key: fs.readFileSync("server.key"),
-      cert: fs.readFileSync("server.cert"),
-    },
-    app
-  )
-  .listen(48544, () => {
-    console.log("Listening 48544...");
-  });
-
-
-  
-  setInterval(checkForFallback, 5000);
-  checkForFallback();
+setInterval(checkForFallback, 5000);
+checkForFallback();
