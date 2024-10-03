@@ -13,8 +13,10 @@ const { mainnet } = require('viem/chains');
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');  // Optional for generating a unique ID
 const EventEmitter = require('events');
+const crypto = require('crypto');
 EventEmitter.defaultMaxListeners = 20; // Increase the default max listeners
 
+const openMessages = new Map();
 
 const localProviderUrl = "https://office.buidlguidl.com:48544/";
 
@@ -119,18 +121,18 @@ async function getFilteredConnectedClients() {
       // Create a Map of filtered clients
       const filteredClients = new Map();
       filteredRows.forEach(row => {
-        console.log(`Checking row with socket_id: ${row.socket_id}`);
+        //console.log(`Checking row with socket_id: ${row.socket_id}`);
         if (row.socket_id) {
           const matchingClient = Array.from(connectedClients).find(client => {
-            console.log(`Comparing: ${client.clientID} with ${row.socket_id}`);
+            //console.log(`Comparing: ${client.clientID} with ${row.socket_id}`);
             return client.clientID === row.socket_id;
           });
           if (matchingClient) {
-            console.log(`Found matching client for socket_id: ${row.socket_id}`);
+            //console.log(`Found matching client for socket_id: ${row.socket_id}`);
             filteredClients.set(row.socket_id, {...matchingClient, nodeStatusId: row.id});  // Include nodeStatusId
           } else {
-            console.log(`No matching client found for socket_id: ${row.socket_id}`);
-            console.log(`Available client IDs: ${Array.from(connectedClients).map(c => c.clientID).join(', ')}`);
+            //console.log(`No matching client found for socket_id: ${row.socket_id}`);
+            //console.log(`Available client IDs: ${Array.from(connectedClients).map(c => c.clientID).join(', ')}`);
           }
         }
       });
@@ -183,105 +185,58 @@ function validateRpcRequest(req, res, next) {
   next();
 }
 
-app.post("/", validateRpcRequest, async (req, res) => {
-  // ... existing logging code ...
+// Add this function to generate a unique message identifier
+function generateMessageId(message, clientIp) {
+  const hash = crypto.createHash('sha256');
+  const timestamp = Date.now();
+  hash.update(JSON.stringify(message) + clientIp + timestamp);
+  return hash.digest('hex');
+}
 
+// Modify the POST route handler
+app.post("/", validateRpcRequest, async (req, res) => {
   console.log("\n\n📡 RPC REQUEST", req.body);
 
   const filteredConnectedClients = await getFilteredConnectedClients();
 
-  console.log("Filtered connected clients:", Array.from(filteredConnectedClients.values()).map(client => ({
-    clientID: client.clientID,
-    nodeStatusId: client.nodeStatusId
-  })));
-
   if(filteredConnectedClients.size > 0) {
-    console.log("CLIENTS CONNECTED, sending to random client")
-
-    // Convert the Map to an array and select a random client
     const clientsArray = Array.from(filteredConnectedClients.values());
     const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
-
+    
     if (randomClient && randomClient.ws) {
-      console.log("Sending RPC call to client with socketID:", randomClient.clientID, "and node_status id:", randomClient.nodeStatusId);
-      
       try {
-        const pool = await getDbPool();
-        const dbClient = await pool.connect();
-        try {
-          // Start a transaction
-          await dbClient.query('BEGIN');
+        const clientIp = req.ip || req.connection.remoteAddress;
+        const messageId = generateMessageId(req.body, clientIp);
 
-          // Increment n_rpc_requests for the selected client
-          const updateNodeStatusResult = await dbClient.query(
-            'UPDATE node_status SET n_rpc_requests = COALESCE(n_rpc_requests, 0) + 1 WHERE socket_id = $1 RETURNING n_rpc_requests, ip_address',
-            [randomClient.clientID]
-          );
-          
-          if (updateNodeStatusResult.rowCount === 0) {
-            console.log(`No rows updated in node_status for client with socketID: ${randomClient.clientID}`);
-          } else {
-            console.log(`Incremented n_rpc_requests for client with socketID: ${randomClient.clientID}. New value:`, updateNodeStatusResult.rows[0].n_rpc_requests);
-            
-            // Get the IP address associated with the socket_id
-            const ipAddress = updateNodeStatusResult.rows[0].ip_address;
-            
-            // Increment points in ip_points table
-            const updateIpPointsResult = await dbClient.query(
-              'INSERT INTO ip_points (ip_address, points) VALUES ($1, 10) ON CONFLICT (ip_address) DO UPDATE SET points = ip_points.points + 10 RETURNING points',
-              [ipAddress]
-            );
-            
-            console.log(`Updated points for IP ${ipAddress}. New value:`, updateIpPointsResult.rows[0].points);
+        console.log('Adding new open message with id:', messageId);
+        openMessages.set(messageId, { req, res, timestamp: Date.now(), rpcId: req.body.id });
+
+        const modifiedMessage = {
+          ...req.body,
+          bgMessageId: messageId
+        };
+
+        randomClient.ws.send(JSON.stringify(modifiedMessage));
+
+        setTimeout(() => {
+          if (openMessages.has(messageId)) {
+            console.log('Timeout reached for message:', messageId);
+            const { res, rpcId } = openMessages.get(messageId);
+            res.status(504).json({
+              jsonrpc: "2.0",
+              id: rpcId,
+              error: {
+                code: -32603,
+                message: "Gateway Timeout",
+                data: "No response received from the node"
+              }
+            });
+            openMessages.delete(messageId);
           }
+        }, 30000);
 
-          // Commit the transaction
-          await dbClient.query('COMMIT');
-        } catch (err) {
-          await dbClient.query('ROLLBACK');
-          throw err;
-        } finally {
-          dbClient.release();
-        }
-      } catch (err) {
-        console.error('Error updating database:', err);
-      }
-
-      // Create a promise to handle the WebSocket message
-      const messagePromise = new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          randomClient.ws.removeListener('message', handleMessage);
-          reject(new Error('WebSocket message timeout'));
-        }, 10000); // 10 second timeout
-
-        function handleMessage(message) {
-          clearTimeout(timeoutId);
-          randomClient.ws.removeListener('message', handleMessage);
-          try {
-            const parsedMessage = JSON.parse(message);
-            if (parsedMessage.error) {
-              reject(new Error(parsedMessage.error.message));
-            } else {
-              resolve(parsedMessage);
-            }
-          } catch (error) {
-            reject(new Error('Invalid JSON response'));
-          }
-        }
-
-        randomClient.ws.once('message', handleMessage);
-      });
-
-      try {
-        // Send the message
-        randomClient.ws.send(JSON.stringify(req.body));
-
-        // Wait for the response
-        const message = await messagePromise;
-        console.log("🛰️ RPC RESPONSE", message);
-        res.json(message);
       } catch (error) {
-        console.error("WebSocket error:", error);
+        console.error("Error sending RPC request:", error);
         res.status(500).json({
           jsonrpc: "2.0",
           id: req.body.id,
@@ -1138,7 +1093,8 @@ wss.on('connection', (ws) => {
   const clientID = uuidv4();
   console.log(`Client ID: ${clientID}`);
 
-  connectedClients.add({ws, clientID});
+  const client = {ws, clientID};
+  connectedClients.add(client);
   ws.send(JSON.stringify({id: clientID}));
 
   ws.isAlive = true;
@@ -1150,22 +1106,44 @@ wss.on('connection', (ws) => {
     ws.pong();
   });
 
-  // Update the message handler
+  // Set up the persistent message listener
   ws.on('message', (message) => {
     try {
-      const data = JSON.parse(message);
-      if (data.type === 'checkin') {
-        handleWebSocketCheckin(ws, JSON.stringify(data.params));
+      const parsedMessage = JSON.parse(message);
+      console.log('Received message:', parsedMessage);
+
+      if (parsedMessage.type === 'checkin') {
+        handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
+      } else if (parsedMessage.jsonrpc === '2.0') {
+        const messageId = parsedMessage.bgMessageId;
+        console.log('Checking for open message with id:', messageId);
+
+        if (messageId && openMessages.has(messageId)) {
+          console.log(`Found matching open message with id ${messageId}. Sending response.`);
+          const openMessage = openMessages.get(messageId);
+          const responseWithOriginalId = {
+            ...parsedMessage,
+            id: openMessage.rpcId
+          };
+          delete responseWithOriginalId.bgMessageId;
+          openMessage.res.json(responseWithOriginalId);
+          openMessages.delete(messageId);
+        } else {
+          console.log('Received response for unknown message:', parsedMessage);
+          console.log('Open message count:', openMessages.size);
+          console.log('Open message IDs:', Array.from(openMessages.keys()));
+        }
+      } else {
+        console.log('Received unknown message type:', parsedMessage);
       }
     } catch (error) {
-      console.error('Error processing WebSocket message:', error);
-      console.error('Received message:', message);
+      console.error('Error processing message:', error);
     }
   });
 
   ws.on('close', () => {
     console.log('WebSocket client disconnected');
-    connectedClients.delete(ws);
+    connectedClients.delete(client);
   });
 });
 
@@ -1381,4 +1359,34 @@ async function getIpLocation(ipAddress) {
     console.error(`Error fetching location for IP ${ipAddress}:`, error.message);
     return null;
   }
+}
+
+// Add a cleanup function to remove old open messages
+function cleanupOpenMessages() {
+  const now = Date.now();
+  for (const [id, message] of openMessages) {
+    if (now - message.timestamp > 60000) { // 1 minute timeout
+      console.log(`Removing timed out message: ${id}`);
+      message.res.status(504).json({
+        jsonrpc: "2.0",
+        id: id,
+        error: {
+          code: -32603,
+          message: "Gateway Timeout",
+          data: "No response received from the node"
+        }
+      });
+      openMessages.delete(id);
+    }
+  }
+}
+
+// Run the cleanup function every minute
+setInterval(cleanupOpenMessages, 60000);
+
+// Helper function to find the closest ID
+function findClosestId(targetId, ids) {
+  return ids.reduce((closest, current) => {
+    return Math.abs(current - targetId) < Math.abs(closest - targetId) ? current : closest;
+  });
 }
