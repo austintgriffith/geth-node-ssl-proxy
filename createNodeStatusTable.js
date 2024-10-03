@@ -28,6 +28,139 @@ const addSocketIdColumnQuery = `
   END $$;
 `;
 
+const addNRpcRequestsColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'n_rpc_requests'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN n_rpc_requests INTEGER;
+    END IF; 
+  END $$;
+`;
+
+const addCountryColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'country'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN country VARCHAR(255);
+    END IF; 
+  END $$;
+`;
+
+const addCountryCodeColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'country_code'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN country_code VARCHAR(10);
+    END IF; 
+  END $$;
+`;
+
+const addRegionColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'region'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN region VARCHAR(255);
+    END IF; 
+  END $$;
+`;
+
+const addCityColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'city'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN city VARCHAR(255);
+    END IF; 
+  END $$;
+`;
+
+const addLatColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'lat'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN lat FLOAT;
+    END IF; 
+  END $$;
+`;
+
+const addLonColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'lon'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN lon FLOAT;
+    END IF; 
+  END $$;
+`;
+
+const renameSecSinceIpLocColumnQuery = `
+  DO $$
+  BEGIN
+    IF EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'sec_since_ip_loc'
+    ) AND NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'ip_loc_lookup_epoch'
+    ) THEN
+      ALTER TABLE node_status
+      RENAME COLUMN sec_since_ip_loc TO ip_loc_lookup_epoch;
+    END IF;
+  END $$;
+`;
+
+const removeSecSinceIpLocColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'sec_since_ip_loc'
+    ) THEN 
+      ALTER TABLE node_status 
+      DROP COLUMN sec_since_ip_loc;
+    END IF; 
+  END $$;
+`;
+
+const addContinentColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'continent'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN continent VARCHAR(255);
+    END IF; 
+  END $$;
+`;
+
 async function createTables() {
   console.log("Creating/updating tables...");
 
@@ -295,7 +428,17 @@ async function createTables() {
       await client.query(addConsensusUdpPortColumnQuery);
       await client.query(removeMultiAddrColumnQuery);
       await client.query(addEnrColumnQuery);
-      await client.query(addSocketIdColumnQuery);  // Add this line
+      await client.query(addSocketIdColumnQuery);
+      await client.query(addNRpcRequestsColumnQuery);
+      await client.query(addCountryColumnQuery);
+      await client.query(addCountryCodeColumnQuery);
+      await client.query(addRegionColumnQuery);
+      await client.query(addCityColumnQuery);
+      await client.query(addLatColumnQuery);
+      await client.query(addLonColumnQuery);
+      await client.query(renameSecSinceIpLocColumnQuery);
+      await client.query(removeSecSinceIpLocColumnQuery);
+      await client.query(addContinentColumnQuery);
 
       const checkColumnQuery = `
         SELECT column_name, data_type, character_maximum_length

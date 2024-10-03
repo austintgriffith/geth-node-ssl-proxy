@@ -148,116 +148,179 @@ async function getFilteredConnectedClients() {
   }
 }
 
-app.post("/", async (req, res) => {
-  if (req.headers && req.headers.referer) {
-    if (last === req.connection.remoteAddress) {
-      //process.stdout.write(".");
-      //process.stdout.write("-")
-    } else {
-      last = req.connection.remoteAddress;
-      if (!memcache[req.headers.referer]) {
-        memcache[req.headers.referer] = 1;
-        process.stdout.write(
-          "NEW SITE " +
-            req.headers.referer +
-            " --> " +
-            req.connection.remoteAddress
-        );
-        process.stdout.write("🪐 " + req.connection.remoteAddress);
-      } else {
-        memcache[req.headers.referer]++;
-      }
-    }
-  }
-
-  if (req.body && req.body.method) {
-    methods[req.body.method] = methods[req.body.method]
-      ? methods[req.body.method] + 1
-      : 1;
-    console.log("--> METHOD", req.body.method, "REFERER", req.headers.referer);
-
-    if (!methodsByReferer[req.headers.referer]) {
-      methodsByReferer[req.headers.referer] = {};
-    }
-
-    methodsByReferer[req.headers.referer] &&
-    methodsByReferer[req.headers.referer][req.body.method]
-      ? methodsByReferer[req.headers.referer][req.body.method]++
-      : (methodsByReferer[req.headers.referer][req.body.method] = 1);
-  }
-
-
-console.log("📡 RPC REQUEST", req.body);
-console.log("Connected WebSocket clients:", listConnectedClients());
-
-
-const filteredConnectedClients = await getFilteredConnectedClients();
-
-console.log("Filtered connected clients:", filteredConnectedClients);
-
-
-if(filteredConnectedClients.size > 0) {
-  console.log("CLIENTS CONNECTED, sending to random client")
-
-  // Convert the Map to an array and select a random client
-  const clientsArray = Array.from(filteredConnectedClients.values());
-  const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
-
-  if (randomClient && randomClient.ws) {
-    console.log("Sending RPC call to client with socketID:", randomClient.clientID, "and node_status id:", randomClient.nodeStatusId);
-    // Create a promise to handle the WebSocket message
-    const messagePromise = new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        randomClient.ws.removeListener('message', handleMessage);
-        reject(new Error('WebSocket message timeout'));
-      }, 10000); // 10 second timeout
-
-      function handleMessage(message) {
-        clearTimeout(timeoutId);
-        randomClient.ws.removeListener('message', handleMessage);
-        resolve(message);
-      }
-
-      randomClient.ws.once('message', handleMessage);
+// Add this function at the top of your file
+async function makeRpcRequest(url, body, headers) {
+  try {
+    const response = await axios.post(url, body, {
+      headers: {
+        "Content-Type": "application/json",
+        ...headers,
+      },
     });
-
-    try {
-      // Send the message
-      randomClient.ws.send(JSON.stringify(req.body));
-
-      // Wait for the response
-      const message = await messagePromise;
-      console.log("🛰️ RPC RESPONSE", message);
-      res.send(message);
-    } catch (error) {
-      console.error("WebSocket error:", error);
-      res.status(500).send("Error communicating with WebSocket client");
+    return response.data;
+  } catch (error) {
+    console.error("RPC request error:", error);
+    if (error.response && error.response.data) {
+      return error.response.data;
     }
-  } else {
-    console.log("Selected client is invalid or has no WebSocket connection");
-    res.status(500).send("No valid client available");
+    throw error;
   }
-} else {
-  console.log("NO CLIENTS CONNECTED, proxy to the office")
-  axios
-  .post(targetUrl, req.body, {
-    headers: {
-      "Content-Type": "application/json",
-      ...req.headers,
-    },
-  })
-  .then((response) => {
-    console.log("POST RESPONSE", response.data);
-    res.status(response.status).send(response.data);
-  })
-  .catch((error) => {
-    console.log("POST ERROR", error);
-    res
-      .status(error.response ? error.response.status : 500)
-      .send(error.message);
-  });
 }
 
+function validateRpcRequest(req, res, next) {
+  const { jsonrpc, method, id } = req.body;
+  if (jsonrpc !== "2.0" || !method || id === undefined) {
+    return res.status(400).send({
+      jsonrpc: "2.0",
+      id: null,
+      error: {
+        code: -32600,
+        message: "Invalid Request",
+        data: "The JSON sent is not a valid Request object"
+      }
+    });
+  }
+  next();
+}
+
+app.post("/", validateRpcRequest, async (req, res) => {
+  // ... existing logging code ...
+
+  console.log("\n\n📡 RPC REQUEST", req.body);
+
+  const filteredConnectedClients = await getFilteredConnectedClients();
+
+  console.log("Filtered connected clients:", Array.from(filteredConnectedClients.values()).map(client => ({
+    clientID: client.clientID,
+    nodeStatusId: client.nodeStatusId
+  })));
+
+  if(filteredConnectedClients.size > 0) {
+    console.log("CLIENTS CONNECTED, sending to random client")
+
+    // Convert the Map to an array and select a random client
+    const clientsArray = Array.from(filteredConnectedClients.values());
+    const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
+
+    if (randomClient && randomClient.ws) {
+      console.log("Sending RPC call to client with socketID:", randomClient.clientID, "and node_status id:", randomClient.nodeStatusId);
+      
+      try {
+        const pool = await getDbPool();
+        const dbClient = await pool.connect();
+        try {
+          // Start a transaction
+          await dbClient.query('BEGIN');
+
+          // Increment n_rpc_requests for the selected client
+          const updateNodeStatusResult = await dbClient.query(
+            'UPDATE node_status SET n_rpc_requests = COALESCE(n_rpc_requests, 0) + 1 WHERE socket_id = $1 RETURNING n_rpc_requests, ip_address',
+            [randomClient.clientID]
+          );
+          
+          if (updateNodeStatusResult.rowCount === 0) {
+            console.log(`No rows updated in node_status for client with socketID: ${randomClient.clientID}`);
+          } else {
+            console.log(`Incremented n_rpc_requests for client with socketID: ${randomClient.clientID}. New value:`, updateNodeStatusResult.rows[0].n_rpc_requests);
+            
+            // Get the IP address associated with the socket_id
+            const ipAddress = updateNodeStatusResult.rows[0].ip_address;
+            
+            // Increment points in ip_points table
+            const updateIpPointsResult = await dbClient.query(
+              'INSERT INTO ip_points (ip_address, points) VALUES ($1, 10) ON CONFLICT (ip_address) DO UPDATE SET points = ip_points.points + 10 RETURNING points',
+              [ipAddress]
+            );
+            
+            console.log(`Updated points for IP ${ipAddress}. New value:`, updateIpPointsResult.rows[0].points);
+          }
+
+          // Commit the transaction
+          await dbClient.query('COMMIT');
+        } catch (err) {
+          await dbClient.query('ROLLBACK');
+          throw err;
+        } finally {
+          dbClient.release();
+        }
+      } catch (err) {
+        console.error('Error updating database:', err);
+      }
+
+      // Create a promise to handle the WebSocket message
+      const messagePromise = new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          randomClient.ws.removeListener('message', handleMessage);
+          reject(new Error('WebSocket message timeout'));
+        }, 10000); // 10 second timeout
+
+        function handleMessage(message) {
+          clearTimeout(timeoutId);
+          randomClient.ws.removeListener('message', handleMessage);
+          try {
+            const parsedMessage = JSON.parse(message);
+            if (parsedMessage.error) {
+              reject(new Error(parsedMessage.error.message));
+            } else {
+              resolve(parsedMessage);
+            }
+          } catch (error) {
+            reject(new Error('Invalid JSON response'));
+          }
+        }
+
+        randomClient.ws.once('message', handleMessage);
+      });
+
+      try {
+        // Send the message
+        randomClient.ws.send(JSON.stringify(req.body));
+
+        // Wait for the response
+        const message = await messagePromise;
+        console.log("🛰️ RPC RESPONSE", message);
+        res.json(message);
+      } catch (error) {
+        console.error("WebSocket error:", error);
+        res.status(500).json({
+          jsonrpc: "2.0",
+          id: req.body.id,
+          error: {
+            code: -32603,
+            message: "Internal error",
+            data: error.message
+          }
+        });
+      }
+    } else {
+      console.log("Selected client is invalid or has no WebSocket connection");
+      res.status(500).json({
+        jsonrpc: "2.0",
+        id: req.body.id,
+        error: {
+          code: -32603,
+          message: "Internal error",
+          data: "No valid client available"
+        }
+      });
+    }
+  } else {
+    console.log("NO CLIENTS CONNECTED, using fallback mechanism");
+    try {
+      const result = await makeRpcRequest(targetUrl, req.body, req.headers);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({
+        jsonrpc: "2.0",
+        id: req.body.id,
+        error: {
+          code: -32603,
+          message: "Internal error",
+          data: error.message
+        }
+      });
+    }
+  }
 
   console.log("POST SERVED", req.body);
 });
@@ -348,15 +411,6 @@ app.get("/active", async (req, res) => {
     const pool = await getDbPool();
     const client = await pool.connect();
     try {
-      // Add this query at the beginning of the /active route:
-      const schemaQuery = `
-        SELECT column_name, data_type, character_maximum_length
-        FROM information_schema.columns
-        WHERE table_name = 'node_status' AND column_name = 'peerid';
-      `;
-      const schemaResult = await client.query(schemaQuery);
-      //console.log('peerID column schema:', schemaResult.rows[0]);
-
       // First, get the total count of records
       const countResult = await client.query('SELECT COUNT(*) FROM node_status');
       const totalRecords = countResult.rows[0].count;
@@ -369,7 +423,8 @@ app.get("/active", async (req, res) => {
                block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
                git_branch, last_commit, commit_hash, enode, 
                COALESCE(peerid, 'NULL_VALUE') as peerid,
-               consensus_tcp_port, consensus_udp_port, enr, socket_id
+               consensus_tcp_port, consensus_udp_port, enr, socket_id, n_rpc_requests,
+               country, country_code, region, city, lat, lon, ip_loc_lookup_epoch, continent
         FROM node_status
         WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
         ORDER BY ip_address DESC, id ASC
@@ -377,9 +432,6 @@ app.get("/active", async (req, res) => {
 
       //console.log(`Total records in node_status: ${totalRecords}`);
       //console.log(`Active records found: ${result.rows.length}`);
-
-      // After executing the query, log the peerID values:
-      //console.log('PeerID values:', result.rows.map(row => ({ id: row.id, peerid: row.peerid })));
 
       let tableRows = result.rows.map(row => `
         <tr>
@@ -405,6 +457,15 @@ app.get("/active", async (req, res) => {
           <td>${row.consensus_udp_port === 'NULL_VALUE' ? 'null' : row.consensus_udp_port}</td>
           <td>${row.enr === 'NULL_VALUE' ? 'null' : row.enr}</td>
           <td>${row.socket_id === 'NULL_VALUE' ? 'null' : row.socket_id}</td>
+          <td>${row.n_rpc_requests === 'NULL_VALUE' ? 'null' : row.n_rpc_requests}</td>
+          <td>${row.continent === 'NULL_VALUE' ? 'null' : row.continent}</td>
+          <td>${row.country === 'NULL_VALUE' ? 'null' : row.country}</td>
+          <td>${row.country_code === 'NULL_VALUE' ? 'null' : row.country_code}</td>
+          <td>${row.region === 'NULL_VALUE' ? 'null' : row.region}</td>
+          <td>${row.city === 'NULL_VALUE' ? 'null' : row.city}</td>
+          <td>${row.lat === 'NULL_VALUE' ? 'null' : row.lat}</td>
+          <td>${row.lon === 'NULL_VALUE' ? 'null' : row.lon}</td>
+          <td>${row.ip_loc_lookup_epoch === 'NULL_VALUE' ? 'null' : row.ip_loc_lookup_epoch}</td>
         </tr>
       `).join('');
 
@@ -439,6 +500,15 @@ app.get("/active", async (req, res) => {
                   <th>Consensus UDP Port</th>
                   <th>ENR (consensus)</th>
                   <th>Socket ID</th>
+                  <th>RPC Requests</th>
+                  <th>Continent</th>
+                  <th>Country</th>
+                  <th>Country Code</th>
+                  <th>Region</th>
+                  <th>City</th>
+                  <th>Lat</th>
+                  <th>Lon</th>
+                  <th>IP Loc Lookup Epoch</th>
                 </tr>
                 ${tableRows}
               </table>
@@ -671,7 +741,7 @@ app.get("/points", async (req, res) => {
 });
 
 app.get("/yourpoints", async (req, res) => {
-  console.log("/YOURPOINTS", req.headers.referer);
+  // console.log("/YOURPOINTS", req.headers.referer);
 
   const ipAddress = req.query.ipaddress;
 
@@ -880,7 +950,7 @@ const wss = new WebSocket.Server({ server });
 const connectedClients = new Set();
 
 // Add this function to handle WebSocket check-ins
-function handleWebSocketCheckin(ws, message) {
+async function handleWebSocketCheckin(ws, message) {
   const checkinData = JSON.parse(message);
   const logMessages = [];
 
@@ -914,20 +984,7 @@ function handleWebSocketCheckin(ws, message) {
         socket_id
       } = checkinData;
 
-      const decodedPeerID = peerid ? decodeURIComponent(peerid) : null;
-      const decodedENR = enr ? decodeURIComponent(enr) : null;
-
-      // Get the client's IP address from the WebSocket connection
-      const ip_address = ws._socket.remoteAddress.replace(/^::ffff:/, '');
-
-      // Validate required fields
-      if (!id) {
-        logMessages.push("Missing required parameter: id");
-        ws.send(JSON.stringify({ error: "Missing required parameter: id" }));
-        return;
-      }
-
-      // Convert numeric fields and provide default values
+      // Parse numeric values
       const parsedCpuUsage = parseFloat(cpu_usage) || null;
       const parsedMemoryUsage = parseFloat(memory_usage) || null;
       const parsedStorageUsage = parseFloat(storage_usage) || null;
@@ -937,12 +994,76 @@ function handleWebSocketCheckin(ws, message) {
       const parsedConsensusTcpPort = parseInt(consensus_tcp_port) || null;
       const parsedConsensusUdpPort = parseInt(consensus_udp_port) || null;
 
+      const decodedPeerID = peerid ? decodeURIComponent(peerid) : null;
+      const decodedENR = enr ? decodeURIComponent(enr) : null;
+
+      // Get the client's IP address from the WebSocket connection
+      const ip_address = ws._socket.remoteAddress.replace(/^::ffff:/, '');
+      const currentEpoch = Math.floor(Date.now() / 1000);
+
+      // Query existing record
+      const existingRecordQuery = `
+        SELECT ip_loc_lookup_epoch, country, country_code, region, city, lat, lon, continent
+        FROM node_status
+        WHERE id = $1
+      `;
+      const existingRecord = await client.query(existingRecordQuery, [id]);
+      
+      // console.log('Existing record:', existingRecord.rows[0]);
+
+      let locationData = null;
+      let shouldUpdateLocation = false;
+
+      if (existingRecord.rows.length > 0) {
+        const lastLookupEpoch = existingRecord.rows[0].ip_loc_lookup_epoch;
+        if (!lastLookupEpoch || (currentEpoch - lastLookupEpoch > 86400)) {
+          shouldUpdateLocation = true;
+        }
+      } else {
+        shouldUpdateLocation = true;
+      }
+
+      // console.log('Should update location:', shouldUpdateLocation);
+
+      if (shouldUpdateLocation) {
+        locationData = await getIpLocation(ip_address);
+        console.log('New location data:', locationData);
+        logMessages.push(`Updated location data for IP: ${ip_address}`);
+      } else {
+        logMessages.push(`Using existing location data for IP: ${ip_address}`);
+      }
+
+      // Prepare location-related parameters
+      const locationParams = shouldUpdateLocation && locationData ? [
+        locationData.country,
+        locationData.countryCode,
+        locationData.region,
+        locationData.city,
+        locationData.lat,
+        locationData.lon,
+        currentEpoch,
+        locationData.continent
+      ] : [
+        existingRecord.rows[0].country,
+        existingRecord.rows[0].country_code,
+        existingRecord.rows[0].region,
+        existingRecord.rows[0].city,
+        existingRecord.rows[0].lat,
+        existingRecord.rows[0].lon,
+        existingRecord.rows[0].ip_loc_lookup_epoch,
+        existingRecord.rows[0].continent
+      ];
+
+      // console.log('Location params:', locationParams);
+
+      // Modify the upsert query to include the continent column
       const upsertQuery = `
         INSERT INTO node_status (
           id, node_version, execution_client, consensus_client, 
           cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
-          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id,
+          country, country_code, region, city, lat, lon, ip_loc_lookup_epoch, continent
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
         ON CONFLICT (id) DO UPDATE SET
           node_version = EXCLUDED.node_version,
           execution_client = EXCLUDED.execution_client,
@@ -964,29 +1085,37 @@ function handleWebSocketCheckin(ws, message) {
           consensus_tcp_port = EXCLUDED.consensus_tcp_port,
           consensus_udp_port = EXCLUDED.consensus_udp_port,
           enr = EXCLUDED.enr,
-          socket_id = EXCLUDED.socket_id;
+          socket_id = EXCLUDED.socket_id,
+          country = COALESCE(EXCLUDED.country, node_status.country),
+          country_code = COALESCE(EXCLUDED.country_code, node_status.country_code),
+          region = COALESCE(EXCLUDED.region, node_status.region),
+          city = COALESCE(EXCLUDED.city, node_status.city),
+          lat = COALESCE(EXCLUDED.lat, node_status.lat),
+          lon = COALESCE(EXCLUDED.lon, node_status.lon),
+          ip_loc_lookup_epoch = COALESCE(EXCLUDED.ip_loc_lookup_epoch, node_status.ip_loc_lookup_epoch),
+          continent = COALESCE(EXCLUDED.continent, node_status.continent)
       `;
 
       const queryParams = [
         id, node_version, execution_client, consensus_client,
         parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers,
-        git_branch, last_commit, commit_hash, enode, decodedPeerID, parsedConsensusTcpPort, parsedConsensusUdpPort, decodedENR, socket_id
+        git_branch, last_commit, commit_hash, enode, decodedPeerID, parsedConsensusTcpPort, parsedConsensusUdpPort, decodedENR, socket_id,
+        ...locationParams
       ];
+
+      // console.log('Query params:', queryParams);
 
       const result = await client.query(upsertQuery, queryParams);
       logMessages.push(`Rows affected: ${result.rowCount}`);
 
-      const checkQuery = 'SELECT peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id FROM node_status WHERE id = $1';
-      const checkResult = await client.query(checkQuery, [id]);
+      // Check the updated record
+      const updatedRecord = await client.query(existingRecordQuery, [id]);
+      // console.log('Updated record:', updatedRecord.rows[0]);
 
-      logMessages.push("CHECKIN SUCCESSFUL");
-      logMessages.push(`Node status updated for ID: ${id}`);
-      logMessages.push(`IP Address: ${ip_address}`);
-      logMessages.push(`peerid: ${decodedPeerID}`);
-      logMessages.push(`Consensus TCP Port: ${parsedConsensusTcpPort}`);
-      logMessages.push(`Consensus UDP Port: ${parsedConsensusUdpPort}`);
-      logMessages.push(`ENR: ${decodedENR}`);
-      logMessages.push(`Socket ID: ${socket_id}`);
+      if (shouldUpdateLocation && locationData) {
+        logMessages.push(`Country: ${locationData.country}, Region: ${locationData.region}, City: ${locationData.city}, Continent: ${locationData.continent}`);
+        logMessages.push(`IP location lookup epoch: ${currentEpoch}`);
+      }
 
       ws.send(JSON.stringify({ success: true, messages: logMessages }));
     } catch (err) {
@@ -1030,6 +1159,7 @@ wss.on('connection', (ws) => {
       }
     } catch (error) {
       console.error('Error processing WebSocket message:', error);
+      console.error('Received message:', message);
     }
   });
 
@@ -1067,7 +1197,7 @@ server.listen(httpsPort, () => {
 });
 
 app.get("/enodes", async (req, res) => {
-  console.log("/ENODES", req.headers.referer);
+  // console.log("/ENODES", req.headers.referer);
 
   try {
     const pool = await getDbPool();
@@ -1165,7 +1295,7 @@ app.get("/consensusPeerAddr", async (req, res) => {
 });
 
 app.get("/peerids", async (req, res) => {
-  console.log("/PEERIDS", req.headers.referer);
+  // console.log("/PEERIDS", req.headers.referer);
 
   try {
     const pool = await getDbPool();
@@ -1210,5 +1340,45 @@ app.get("/peerids", async (req, res) => {
   }
 });
 
+app.get("/IPLOCATIONS", async (req, res) => {
+  console.log("/IPLOCATIONS", req.headers.referer);
+
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT ip_address, lat, lon, COUNT(*) as node_count
+        FROM node_status
+        WHERE lat IS NOT NULL AND lon IS NOT NULL
+        GROUP BY ip_address, lat, lon
+      `);
+
+      const ipLocations = result.rows.map(row => ({
+        name: `${row.node_count} Node${row.node_count > 1 ? 's' : ''}`,
+        position: [parseFloat(row.lat), parseFloat(row.lon)]
+      }));
+
+      res.json({ ipLocations });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving IP locations:', err);
+    res.status(500).json({ error: "An error occurred while retrieving IP locations" });
+  }
+});
+
 setInterval(checkForFallback, 5000);
 checkForFallback();
+
+async function getIpLocation(ipAddress) {
+  try {
+    const response = await axios.get(`http://ip-api.com/json/${ipAddress}?fields=continent,country,countryCode,region,city,lat,lon`);
+    console.log('IP API response:', response.data);  // Add this line
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching location for IP ${ipAddress}:`, error.message);
+    return null;
+  }
+}
