@@ -193,6 +193,45 @@ function generateMessageId(message, clientIp) {
   return hash.digest('hex');
 }
 
+// Add this function to increment n_rpc_requests
+async function incrementRpcRequests(clientID) {
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      await client.query(`
+        UPDATE node_status
+        SET n_rpc_requests = COALESCE(n_rpc_requests, 0) + 1
+        WHERE socket_id = $1
+      `, [clientID]);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error incrementing n_rpc_requests:', err);
+  }
+}
+
+// Add this function to increment points for an IP address
+async function incrementIpPoints(ipAddress) {
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      await client.query(`
+        INSERT INTO ip_points (ip_address, points)
+        VALUES ($1, 10)
+        ON CONFLICT (ip_address)
+        DO UPDATE SET points = ip_points.points + 10
+      `, [ipAddress]);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error incrementing IP points:', err);
+  }
+}
+
 // Modify the POST route handler
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("\n\n📡 RPC REQUEST", req.body);
@@ -1097,6 +1136,9 @@ wss.on('connection', (ws) => {
   connectedClients.add(client);
   ws.send(JSON.stringify({id: clientID}));
 
+  // Store the client's IP address
+  const clientIpAddress = ws._socket.remoteAddress.replace(/^::ffff:/, '');
+
   ws.isAlive = true;
   ws.on('pong', () => {
     ws.isAlive = true;
@@ -1107,7 +1149,7 @@ wss.on('connection', (ws) => {
   });
 
   // Set up the persistent message listener
-  ws.on('message', (message) => {
+  ws.on('message', async (message) => {
     try {
       const parsedMessage = JSON.parse(message);
       console.log('Received message:', parsedMessage);
@@ -1116,29 +1158,44 @@ wss.on('connection', (ws) => {
         handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
       } else if (parsedMessage.jsonrpc === '2.0') {
         const messageId = parsedMessage.bgMessageId;
-        console.log('Checking for open message with id:', messageId);
+        
+        if (messageId) {
+          console.log('Checking for open message with id:', messageId);
 
-        if (messageId && openMessages.has(messageId)) {
-          console.log(`Found matching open message with id ${messageId}. Sending response.`);
-          const openMessage = openMessages.get(messageId);
-          const responseWithOriginalId = {
-            ...parsedMessage,
-            id: openMessage.rpcId
-          };
-          delete responseWithOriginalId.bgMessageId;
-          openMessage.res.json(responseWithOriginalId);
-          openMessages.delete(messageId);
+          if (openMessages.has(messageId)) {
+            console.log(`Found matching open message with id ${messageId}. Sending response.`);
+            const openMessage = openMessages.get(messageId);
+            const responseWithOriginalId = {
+              ...parsedMessage,
+              id: openMessage.rpcId
+            };
+            delete responseWithOriginalId.bgMessageId;
+            openMessage.res.json(responseWithOriginalId);
+            openMessages.delete(messageId);
+
+            // Increment n_rpc_requests for the client that served the request
+            await incrementRpcRequests(client.clientID);
+
+            // Increment points for the client's IP address
+            await incrementIpPoints(clientIpAddress);
+          } else {
+            console.log(`No open message found for id ${messageId}. This might be a delayed response.`);
+          }
         } else {
-          console.log('Received response for unknown message:', parsedMessage);
-          console.log('Open message count:', openMessages.size);
-          console.log('Open message IDs:', Array.from(openMessages.keys()));
+          console.log('Received RPC message without bgMessageId:', parsedMessage);
         }
       } else {
-        console.log('Received unknown message type:', parsedMessage);
+        console.log('Received message with unknown type:', parsedMessage);
       }
     } catch (error) {
       console.error('Error processing message:', error);
     }
+
+    // Log the current state of open messages
+    console.log('Current open messages:', {
+      count: openMessages.size,
+      ids: Array.from(openMessages.keys())
+    });
   });
 
   ws.on('close', () => {
