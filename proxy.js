@@ -432,6 +432,7 @@ app.get("/active", async (req, res) => {
           <td>${row.id}</td>  
           <td><a href="https://ethernodes.org/node/${row.ip_address}" target="_blank">${row.ip_address}</a></td>
           <td>${row.owner === 'NULL_VALUE' ? 'null' : row.owner}</td>
+          <td>${row.n_rpc_requests === 'NULL_VALUE' ? 'null' : row.n_rpc_requests}</td>
           <td>${row.block_number}</td>
           <td>${row.block_hash}</td>
           <td>${new Date(row.last_checkin).toString().replace(' GMT+0000 (Coordinated Universal Time)', '')}</td>
@@ -452,7 +453,6 @@ app.get("/active", async (req, res) => {
           <td>${row.consensus_udp_port === 'NULL_VALUE' ? 'null' : row.consensus_udp_port}</td>
           <td>${row.enr === 'NULL_VALUE' ? 'null' : row.enr}</td>
           <td>${row.socket_id === 'NULL_VALUE' ? 'null' : row.socket_id}</td>
-          <td>${row.n_rpc_requests === 'NULL_VALUE' ? 'null' : row.n_rpc_requests}</td>
           <td>${row.continent === 'NULL_VALUE' ? 'null' : row.continent}</td>
           <td>${row.country === 'NULL_VALUE' ? 'null' : row.country}</td>
           <td>${row.country_code === 'NULL_VALUE' ? 'null' : row.country_code}</td>
@@ -476,6 +476,7 @@ app.get("/active", async (req, res) => {
                   <th>ID</th>
                   <th>IP Address</th>
                   <th>Owner</th>
+                  <th>RPC Requests</th>
                   <th>Block Number</th>
                   <th>Block Hash</th>
                   <th>Last Checkin (UTC)</th>
@@ -496,7 +497,6 @@ app.get("/active", async (req, res) => {
                   <th>Consensus UDP Port</th>
                   <th>ENR (consensus)</th>
                   <th>Socket ID</th>
-                  <th>RPC Requests</th>
                   <th>Continent</th>
                   <th>Country</th>
                   <th>Country Code</th>
