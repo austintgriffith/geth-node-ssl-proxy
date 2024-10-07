@@ -599,8 +599,8 @@ app.get("/checkin", async (req, res) => {
         INSERT INTO node_status (
           id, node_version, execution_client, consensus_client, 
           cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
-          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id, owner  // Add owner here
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)  // Add $22 for owner
+          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id, owner  
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)  
         ON CONFLICT (id) DO UPDATE SET
           node_version = EXCLUDED.node_version,
           execution_client = EXCLUDED.execution_client,
@@ -623,7 +623,7 @@ app.get("/checkin", async (req, res) => {
           consensus_udp_port = EXCLUDED.consensus_udp_port,
           enr = EXCLUDED.enr,
           socket_id = EXCLUDED.socket_id,
-          owner = EXCLUDED.owner  // Add owner here
+          owner = EXCLUDED.owner 
       `;
 
       const queryParams = [
