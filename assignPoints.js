@@ -3,7 +3,7 @@ const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client
 require('dotenv').config();
 
 async function assignPoints() {
-  console.log("Assigning points to active nodes...");
+  console.log("Assigning points to active node owners...");
 
   const secret_name = process.env.RDS_SECRET_NAME;
   const secretsClient = new SecretsManagerClient({ 
@@ -40,29 +40,35 @@ async function assignPoints() {
 
     const dbClient = await pool.connect();
     try {
-      // Get active nodes from the last 5 minutes
+      // Get active nodes and their owners from the last 5 minutes
       const activeNodesQuery = `
-        SELECT DISTINCT ip_address
+        SELECT owner, COUNT(*) as active_count
         FROM node_status
-        WHERE last_checkin > NOW() - INTERVAL '5 minutes';
+        WHERE last_checkin > NOW() - INTERVAL '5 minutes'
+          AND owner IS NOT NULL
+        GROUP BY owner;
       `;
       const activeNodesResult = await dbClient.query(activeNodesQuery);
-      const activeIPs = activeNodesResult.rows.map(row => row.ip_address);
+      const activeOwners = activeNodesResult.rows;
 
-      // Update points for active IPs
+      // Update points for active owners
       const updatePointsQuery = `
-        INSERT INTO ip_points (ip_address, points)
-        VALUES ($1, 1::BIGINT)
-        ON CONFLICT (ip_address)
-        DO UPDATE SET points = ip_points.points + 1::BIGINT;
+        INSERT INTO owner_points (owner, points)
+        VALUES ($1, $2::BIGINT)
+        ON CONFLICT (owner)
+        DO UPDATE SET points = owner_points.points + $2::BIGINT;
       `;
 
-      for (const ip of activeIPs) {
-        await dbClient.query(updatePointsQuery, [ip]);
-        console.log(`Assigned 1 point to IP: ${ip}`);
+      for (const { owner, active_count } of activeOwners) {
+        if (owner) {
+          await dbClient.query(updatePointsQuery, [owner, active_count]);
+          console.log(`Assigned ${active_count} points to owner: ${owner}`);
+        } else {
+          console.log(`Skipped assigning ${active_count} points due to null owner`);
+        }
       }
 
-      console.log(`Points assigned to ${activeIPs.length} active IPs.`);
+      console.log(`Points assigned to ${activeOwners.length} active owners.`);
     } finally {
       dbClient.release();
     }
@@ -75,4 +81,21 @@ async function assignPoints() {
   }
 }
 
-assignPoints();
+function startAssignPointsScheduler() {
+  // Run assignPoints every 5 minutes
+  const FIVE_MINUTES = 5 * 60 * 1000;
+  setInterval(assignPoints, FIVE_MINUTES);
+
+  // Initial run
+  assignPoints().catch(err => console.error('Error in initial assignPoints run:', err));
+
+  console.log("Point assignment scheduler started. Running every 5 minutes.");
+}
+
+// Check if this script is being run directly (not imported as a module)
+if (require.main === module) {
+  startAssignPointsScheduler();
+}
+
+// Export the function for potential use in other modules
+module.exports = { startAssignPointsScheduler, assignPoints };

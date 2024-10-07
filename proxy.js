@@ -212,23 +212,23 @@ async function incrementRpcRequests(clientID) {
   }
 }
 
-// Add this function to increment points for an IP address
-async function incrementIpPoints(ipAddress) {
+// Add this function to increment points for an owner
+async function incrementOwnerPoints(owner) {
   try {
     const pool = await getDbPool();
     const client = await pool.connect();
     try {
       await client.query(`
-        INSERT INTO ip_points (ip_address, points)
+        INSERT INTO owner_points (owner, points)
         VALUES ($1, 10)
-        ON CONFLICT (ip_address)
-        DO UPDATE SET points = ip_points.points + 10
-      `, [ipAddress]);
+        ON CONFLICT (owner)
+        DO UPDATE SET points = owner_points.points + 10
+      `, [owner]);
     } finally {
       client.release();
     }
   } catch (err) {
-    console.error('Error incrementing IP points:', err);
+    console.error('Error incrementing owner points:', err);
   }
 }
 
@@ -418,7 +418,7 @@ app.get("/active", async (req, res) => {
                git_branch, last_commit, commit_hash, enode, 
                COALESCE(peerid, 'NULL_VALUE') as peerid,
                consensus_tcp_port, consensus_udp_port, enr, socket_id, n_rpc_requests,
-               country, country_code, region, city, lat, lon, ip_loc_lookup_epoch, continent
+               country, country_code, region, city, lat, lon, ip_loc_lookup_epoch, continent, owner
         FROM node_status
         WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
         ORDER BY ip_address DESC, id ASC
@@ -429,8 +429,9 @@ app.get("/active", async (req, res) => {
 
       let tableRows = result.rows.map(row => `
         <tr>
-          <td>${row.id}</td>
+          <td>${row.id}</td>  
           <td><a href="https://ethernodes.org/node/${row.ip_address}" target="_blank">${row.ip_address}</a></td>
+          <td>${row.owner === 'NULL_VALUE' ? 'null' : row.owner}</td>
           <td>${row.block_number}</td>
           <td>${row.block_hash}</td>
           <td>${new Date(row.last_checkin).toString().replace(' GMT+0000 (Coordinated Universal Time)', '')}</td>
@@ -474,6 +475,7 @@ app.get("/active", async (req, res) => {
                 <tr>
                   <th>ID</th>
                   <th>IP Address</th>
+                  <th>Owner</th>
                   <th>Block Number</th>
                   <th>Block Hash</th>
                   <th>Last Checkin (UTC)</th>
@@ -560,8 +562,9 @@ app.get("/checkin", async (req, res) => {
         peerid,
         consensus_tcp_port,
         consensus_udp_port,
-        enr,  // Add this line to extract the enr parameter
-        socket_id
+        enr,
+        socket_id,
+        owner
       } = req.query;
 
       //console.log('Raw peerid:', peerid);
@@ -596,8 +599,8 @@ app.get("/checkin", async (req, res) => {
         INSERT INTO node_status (
           id, node_version, execution_client, consensus_client, 
           cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
-          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id, owner  // Add owner here
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)  // Add $22 for owner
         ON CONFLICT (id) DO UPDATE SET
           node_version = EXCLUDED.node_version,
           execution_client = EXCLUDED.execution_client,
@@ -619,13 +622,14 @@ app.get("/checkin", async (req, res) => {
           consensus_tcp_port = EXCLUDED.consensus_tcp_port,
           consensus_udp_port = EXCLUDED.consensus_udp_port,
           enr = EXCLUDED.enr,
-          socket_id = EXCLUDED.socket_id;
+          socket_id = EXCLUDED.socket_id,
+          owner = EXCLUDED.owner  // Add owner here
       `;
 
       const queryParams = [
         id, node_version, execution_client, consensus_client,
         parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers,
-        git_branch, last_commit, commit_hash, enode, decodedPeerID, parsedConsensusTcpPort, parsedConsensusUdpPort, decodedENR, socket_id
+        git_branch, last_commit, commit_hash, enode, decodedPeerID, parsedConsensusTcpPort, parsedConsensusUdpPort, decodedENR, socket_id, owner
       ];
 
       //console.log('Query parameters:', queryParams);
@@ -682,10 +686,10 @@ app.get("/points", async (req, res) => {
     const pool = await getDbPool();
     const client = await pool.connect();
     try {
-      // Query for all entries in the ip_points table
+      // Query for all entries in the owner_points table
       const result = await client.query(`
-        SELECT ip_address, points
-        FROM ip_points
+        SELECT owner, points
+        FROM owner_points
         ORDER BY points DESC
       `);
 
@@ -693,7 +697,7 @@ app.get("/points", async (req, res) => {
 
       let tableRows = result.rows.map(row => `
         <tr>
-          <td>${row.ip_address}</td>
+          <td>${row.owner}</td>
           <td>${row.points}</td>
         </tr>
       `).join('');
@@ -702,11 +706,11 @@ app.get("/points", async (req, res) => {
         <html>
           <body>
             <div style='padding:20px;font-size:18px'>
-              <h1>IP POINTS</h1>
+              <h1>OWNER POINTS</h1>
               <p>Total records: ${result.rows.length}</p>
               <table border="1" cellpadding="5">
                 <tr>
-                  <th>IP Address</th>
+                  <th>Owner</th>
                   <th>Points</th>
                 </tr>
                 ${tableRows}
@@ -719,13 +723,13 @@ app.get("/points", async (req, res) => {
       client.release();
     }
   } catch (err) {
-    console.error('Error retrieving IP points:', err);
+    console.error('Error retrieving owner points:', err);
     res.status(500).send(`
       <html>
         <body>
           <div style='padding:20px;font-size:18px'>
-            <h1>ERROR RETRIEVING IP POINTS</h1>
-            <p>An error occurred while trying to retrieve IP points from the database.</p>
+            <h1>ERROR RETRIEVING OWNER POINTS</h1>
+            <p>An error occurred while trying to retrieve owner points from the database.</p>
             <p>Error details: ${err.message}</p>
           </div>
         </body>
@@ -735,12 +739,12 @@ app.get("/points", async (req, res) => {
 });
 
 app.get("/yourpoints", async (req, res) => {
-  // console.log("/YOURPOINTS", req.headers.referer);
+  console.log("/YOURPOINTS", req.headers.referer);
 
-  const ipAddress = req.query.ipaddress;
+  const owner = req.query.owner;
 
-  if (!ipAddress) {
-    return res.status(400).json({ error: "Missing required parameter: ipaddress" });
+  if (!owner) {
+    return res.status(400).json({ error: "Missing required parameter: owner" });
   }
 
   try {
@@ -748,21 +752,21 @@ app.get("/yourpoints", async (req, res) => {
     const client = await pool.connect();
     try {
       const result = await client.query(
-        'SELECT points FROM ip_points WHERE ip_address = $1',
-        [ipAddress]
+        'SELECT points FROM owner_points WHERE owner = $1',
+        [owner]
       );
 
       if (result.rows.length > 0) {
         const points = result.rows[0].points;
-        res.json({ ipAddress, points });
+        res.json({ owner, points });
       } else {
-        res.json({ ipAddress, points: 0 });
+        res.json({ owner, points: 0 });
       }
     } finally {
       client.release();
     }
   } catch (err) {
-    console.error('Error retrieving points for IP:', err);
+    console.error('Error retrieving points for owner:', err);
     res.status(500).json({ error: "An error occurred while retrieving points" });
   }
 });
@@ -975,7 +979,8 @@ async function handleWebSocketCheckin(ws, message) {
         consensus_tcp_port,
         consensus_udp_port,
         enr,
-        socket_id
+        socket_id,
+        owner
       } = checkinData;
 
       // Parse numeric values
@@ -1050,14 +1055,14 @@ async function handleWebSocketCheckin(ws, message) {
 
       // console.log('Location params:', locationParams);
 
-      // Modify the upsert query to include the continent column
+      // Modify the upsert query to ensure continent is treated as text
       const upsertQuery = `
         INSERT INTO node_status (
           id, node_version, execution_client, consensus_client, 
           cpu_usage, memory_usage, storage_usage, block_number, block_hash, last_checkin, ip_address, execution_peers, consensus_peers,
-          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id,
+          git_branch, last_commit, commit_hash, enode, peerid, consensus_tcp_port, consensus_udp_port, enr, socket_id, owner,
           country, country_code, region, city, lat, lon, ip_loc_lookup_epoch, continent
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
         ON CONFLICT (id) DO UPDATE SET
           node_version = EXCLUDED.node_version,
           execution_client = EXCLUDED.execution_client,
@@ -1080,6 +1085,7 @@ async function handleWebSocketCheckin(ws, message) {
           consensus_udp_port = EXCLUDED.consensus_udp_port,
           enr = EXCLUDED.enr,
           socket_id = EXCLUDED.socket_id,
+          owner = EXCLUDED.owner,
           country = COALESCE(EXCLUDED.country, node_status.country),
           country_code = COALESCE(EXCLUDED.country_code, node_status.country_code),
           region = COALESCE(EXCLUDED.region, node_status.region),
@@ -1093,18 +1099,19 @@ async function handleWebSocketCheckin(ws, message) {
       const queryParams = [
         id, node_version, execution_client, consensus_client,
         parsedCpuUsage, parsedMemoryUsage, parsedStorageUsage, parsedBlockNumber, block_hash, ip_address, parsedExecutionPeers, parsedConsensusPeers,
-        git_branch, last_commit, commit_hash, enode, decodedPeerID, parsedConsensusTcpPort, parsedConsensusUdpPort, decodedENR, socket_id,
-        ...locationParams
+        git_branch, last_commit, commit_hash, enode, decodedPeerID, parsedConsensusTcpPort, parsedConsensusUdpPort, decodedENR, socket_id, owner,
+        locationParams[0], // country
+        locationParams[1], // country_code
+        locationParams[2], // region
+        locationParams[3], // city
+        locationParams[4], // lat
+        locationParams[5], // lon
+        locationParams[6], // ip_loc_lookup_epoch
+        locationParams[7]  // continent
       ];
-
-      // console.log('Query params:', queryParams);
 
       const result = await client.query(upsertQuery, queryParams);
       logMessages.push(`Rows affected: ${result.rowCount}`);
-
-      // Check the updated record
-      const updatedRecord = await client.query(existingRecordQuery, [id]);
-      // console.log('Updated record:', updatedRecord.rows[0]);
 
       if (shouldUpdateLocation && locationData) {
         logMessages.push(`Country: ${locationData.country}, Region: ${locationData.region}, City: ${locationData.city}, Continent: ${locationData.continent}`);
@@ -1152,12 +1159,13 @@ wss.on('connection', (ws) => {
   ws.on('message', async (message) => {
     try {
       const parsedMessage = JSON.parse(message);
-      console.log('Received message:', parsedMessage);
 
       if (parsedMessage.type === 'checkin') {
         handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
+        console.log('Received checkin message');
       } else if (parsedMessage.jsonrpc === '2.0') {
         const messageId = parsedMessage.bgMessageId;
+        console.log('Received message:', parsedMessage);
         
         if (messageId) {
           console.log('Checking for open message with id:', messageId);
@@ -1176,13 +1184,18 @@ wss.on('connection', (ws) => {
             // Increment n_rpc_requests for the client that served the request
             await incrementRpcRequests(client.clientID);
 
-            // Increment points for the client's IP address
-            await incrementIpPoints(clientIpAddress);
+            // Increment points for the client's owner
+            const ownerResult = await getOwnerForClientId(client.clientID);
+            if (ownerResult && ownerResult.owner) {
+              await incrementOwnerPoints(ownerResult.owner);
+            }
           } else {
             console.log(`No open message found for id ${messageId}. This might be a delayed response.`);
           }
         } else {
-          console.log('Received RPC message without bgMessageId:', parsedMessage);
+          if (messageId) {
+            console.log('Received RPC message without bgMessageId:', parsedMessage);
+          }
         }
       } else {
         console.log('Received message with unknown type:', parsedMessage);
@@ -1446,4 +1459,30 @@ function findClosestId(targetId, ids) {
   return ids.reduce((closest, current) => {
     return Math.abs(current - targetId) < Math.abs(closest - targetId) ? current : closest;
   });
+}
+
+// Add this function to get the owner for a given client ID
+async function getOwnerForClientId(clientId) {
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT owner
+        FROM node_status
+        WHERE socket_id = $1
+      `, [clientId]);
+      
+      if (result.rows.length > 0) {
+        return { owner: result.rows[0].owner };
+      } else {
+        return null;
+      }
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error getting owner for client ID:', err);
+    return null;
+  }
 }

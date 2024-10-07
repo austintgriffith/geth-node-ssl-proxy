@@ -161,6 +161,19 @@ const addContinentColumnQuery = `
   END $$;
 `;
 
+const addOwnerColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'owner'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN owner VARCHAR(255);
+    END IF; 
+  END $$;
+`;
+
 async function createTables() {
   console.log("Creating/updating tables...");
 
@@ -411,6 +424,19 @@ async function createTables() {
       END $$;
     `;
 
+    const addOwnerColumnQuery = `
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_name = 'node_status' AND column_name = 'owner'
+        ) THEN 
+          ALTER TABLE node_status 
+          ADD COLUMN owner VARCHAR(255);
+        END IF; 
+      END $$;
+    `;
+
     client = await pool.connect();
     try {
       await client.query(createTableQuery);
@@ -428,6 +454,7 @@ async function createTables() {
       await client.query(addConsensusUdpPortColumnQuery);
       await client.query(removeMultiAddrColumnQuery);
       await client.query(addEnrColumnQuery);
+      await client.query(addOwnerColumnQuery);
       await client.query(addSocketIdColumnQuery);
       await client.query(addNRpcRequestsColumnQuery);
       await client.query(addCountryColumnQuery);
