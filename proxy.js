@@ -680,7 +680,7 @@ app.get("/checkin", async (req, res) => {
 });
 
 app.get("/points", async (req, res) => {
-  console.log("/POINTS", req.headers.referer);
+  // console.log("/POINTS", req.headers.referer);
 
   try {
     const pool = await getDbPool();
@@ -693,7 +693,7 @@ app.get("/points", async (req, res) => {
         ORDER BY points DESC
       `);
 
-      console.log(`Total records found: ${result.rows.length}`);
+      // console.log(`Total records found: ${result.rows.length}`);
 
       let tableRows = result.rows.map(row => `
         <tr>
@@ -739,7 +739,7 @@ app.get("/points", async (req, res) => {
 });
 
 app.get("/yourpoints", async (req, res) => {
-  console.log("/YOURPOINTS", req.headers.referer);
+  // console.log("/YOURPOINTS", req.headers.referer);
 
   const owner = req.query.owner;
 
@@ -1118,7 +1118,7 @@ async function handleWebSocketCheckin(ws, message) {
         logMessages.push(`IP location lookup epoch: ${currentEpoch}`);
       }
 
-      ws.send(JSON.stringify({ success: true, messages: logMessages }));
+      // ws.send(JSON.stringify({ success: true, messages: logMessages }));
     } catch (err) {
       console.error('Error in WebSocket checkin:', err);
       logMessages.push('Error updating node status:', err.message);
@@ -1162,10 +1162,16 @@ wss.on('connection', (ws) => {
 
       if (parsedMessage.type === 'checkin') {
         handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
-        console.log('Received checkin message');
+        // console.log('Received checkin message');
       } else if (parsedMessage.jsonrpc === '2.0') {
         const messageId = parsedMessage.bgMessageId;
         console.log('Received message:', parsedMessage);
+
+        // Log the current state of open messages
+        console.log('Current open messages:', {
+          count: openMessages.size,
+          ids: Array.from(openMessages.keys())
+        });
         
         if (messageId) {
           console.log('Checking for open message with id:', messageId);
@@ -1203,12 +1209,6 @@ wss.on('connection', (ws) => {
     } catch (error) {
       console.error('Error processing message:', error);
     }
-
-    // Log the current state of open messages
-    console.log('Current open messages:', {
-      count: openMessages.size,
-      ids: Array.from(openMessages.keys())
-    });
   });
 
   ws.on('close', () => {

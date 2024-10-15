@@ -81,21 +81,4 @@ async function assignPoints() {
   }
 }
 
-function startAssignPointsScheduler() {
-  // Run assignPoints every 5 minutes
-  const FIVE_MINUTES = 5 * 60 * 1000;
-  setInterval(assignPoints, FIVE_MINUTES);
-
-  // Initial run
-  assignPoints().catch(err => console.error('Error in initial assignPoints run:', err));
-
-  console.log("Point assignment scheduler started. Running every 5 minutes.");
-}
-
-// Check if this script is being run directly (not imported as a module)
-if (require.main === module) {
-  startAssignPointsScheduler();
-}
-
-// Export the function for potential use in other modules
-module.exports = { startAssignPointsScheduler, assignPoints };
+assignPoints();
