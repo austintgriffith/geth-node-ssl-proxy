@@ -1,5 +1,6 @@
 
 assignPoints.log
+rpcRequests.log
 .env
 jwt.hex
 node_modules

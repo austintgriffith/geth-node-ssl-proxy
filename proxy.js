@@ -232,9 +232,30 @@ async function incrementOwnerPoints(owner) {
   }
 }
 
+function logRpcRequest(req) {
+  const { method, params } = req.body;
+  let logEntry = `${method}`;
+  
+  if (params && Array.isArray(params) && params.length > 0) {
+    logEntry += `, ${params.join(', ')}`;
+  }
+  
+  logEntry += '\n';
+  
+  fs.appendFile('rpcRequests.log', logEntry, (err) => {
+    if (err) {
+      console.error('Error writing to log file:', err);
+    }
+  });
+}
+
 // Modify the POST route handler
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("\n\n📡 RPC REQUEST", req.body);
+  console.log("Request URL:", req.protocol + '://' + req.get('host') + req.originalUrl);
+
+  // Add this line to log the RPC request
+  logRpcRequest(req);
 
   const filteredConnectedClients = await getFilteredConnectedClients();
 
