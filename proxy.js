@@ -236,8 +236,13 @@ function logRpcRequest(req) {
   const { method, params } = req.body;
   let logEntry = `${method}`;
   
-  if (params && Array.isArray(params) && params.length > 0) {
-    logEntry += `, ${params.join(', ')}`;
+  if (params && Array.isArray(params)) {
+    logEntry += `, ${params.map(param => {
+      if (typeof param === 'object' && param !== null) {
+        return JSON.stringify(param);
+      }
+      return param;
+    }).join(', ')}`;
   }
   
   logEntry += '\n';
@@ -253,9 +258,6 @@ function logRpcRequest(req) {
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("\n\n📡 RPC REQUEST", req.body);
   console.log("Request URL:", req.protocol + '://' + req.get('host') + req.originalUrl);
-
-  // Add this line to log the RPC request
-  logRpcRequest(req);
 
   const filteredConnectedClients = await getFilteredConnectedClients();
 
@@ -337,6 +339,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     }
   }
 
+  logRpcRequest(req);
   console.log("POST SERVED", req.body);
 });
 
