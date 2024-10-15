@@ -14,6 +14,7 @@ const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');  // Optional for generating a unique ID
 const EventEmitter = require('events');
 const crypto = require('crypto');
+const { performance } = require('perf_hooks');
 EventEmitter.defaultMaxListeners = 20; // Increase the default max listeners
 
 const openMessages = new Map();
@@ -232,27 +233,8 @@ async function incrementOwnerPoints(owner) {
   }
 }
 
-function logRpcRequest(req) {
-  const { method, params } = req.body;
-  let logEntry = `${method}`;
-  
-  if (params && Array.isArray(params)) {
-    logEntry += `, ${params.map(param => {
-      if (typeof param === 'object' && param !== null) {
-        return JSON.stringify(param);
-      }
-      return param;
-    }).join(', ')}`;
-  }
-  
-  logEntry += '\n';
-  
-  fs.appendFile('rpcRequests.log', logEntry, (err) => {
-    if (err) {
-      console.error('Error writing to log file:', err);
-    }
-  });
-}
+// Add this Map to store start times for each bgMessageId
+const requestStartTimes = new Map();
 
 // Modify the POST route handler
 app.post("/", validateRpcRequest, async (req, res) => {
@@ -272,6 +254,9 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
         console.log('Adding new open message with id:', messageId);
         openMessages.set(messageId, { req, res, timestamp: Date.now(), rpcId: req.body.id });
+
+        // Store the start time for this messageId
+        requestStartTimes.set(messageId, performance.now());
 
         const modifiedMessage = {
           ...req.body,
@@ -339,7 +324,6 @@ app.post("/", validateRpcRequest, async (req, res) => {
     }
   }
 
-  logRpcRequest(req);
   console.log("POST SERVED", req.body);
 });
 
@@ -1190,42 +1174,31 @@ wss.on('connection', (ws) => {
       } else if (parsedMessage.jsonrpc === '2.0') {
         const messageId = parsedMessage.bgMessageId;
         console.log('Received message:', parsedMessage);
-
-        // Log the current state of open messages
-        console.log('Current open messages:', {
-          count: openMessages.size,
-          ids: Array.from(openMessages.keys())
-        });
         
-        if (messageId) {
-          console.log('Checking for open message with id:', messageId);
+        if (messageId && openMessages.has(messageId)) {
+          console.log(`Found matching open message with id ${messageId}. Sending response.`);
+          const openMessage = openMessages.get(messageId);
+          const responseWithOriginalId = {
+            ...parsedMessage,
+            id: openMessage.rpcId
+          };
+          delete responseWithOriginalId.bgMessageId;
+          openMessage.res.json(responseWithOriginalId);
+          openMessages.delete(messageId);
 
-          if (openMessages.has(messageId)) {
-            console.log(`Found matching open message with id ${messageId}. Sending response.`);
-            const openMessage = openMessages.get(messageId);
-            const responseWithOriginalId = {
-              ...parsedMessage,
-              id: openMessage.rpcId
-            };
-            delete responseWithOriginalId.bgMessageId;
-            openMessage.res.json(responseWithOriginalId);
-            openMessages.delete(messageId);
+          // Log the RPC request with timing information
+          logRpcRequest(openMessage.req, messageId);
 
-            // Increment n_rpc_requests for the client that served the request
-            await incrementRpcRequests(client.clientID);
+          // Increment n_rpc_requests for the client that served the request
+          await incrementRpcRequests(client.clientID);
 
-            // Increment points for the client's owner
-            const ownerResult = await getOwnerForClientId(client.clientID);
-            if (ownerResult && ownerResult.owner) {
-              await incrementOwnerPoints(ownerResult.owner);
-            }
-          } else {
-            console.log(`No open message found for id ${messageId}. This might be a delayed response.`);
+          // Increment points for the client's owner
+          const ownerResult = await getOwnerForClientId(client.clientID);
+          if (ownerResult && ownerResult.owner) {
+            await incrementOwnerPoints(ownerResult.owner);
           }
         } else {
-          if (messageId) {
-            console.log('Received RPC message without bgMessageId:', parsedMessage);
-          }
+          console.log(`No open message found for id ${messageId}. This might be a delayed response.`);
         }
       } else {
         console.log('Received message with unknown type:', parsedMessage);
@@ -1509,4 +1482,34 @@ async function getOwnerForClientId(clientId) {
     console.error('Error getting owner for client ID:', err);
     return null;
   }
+}
+
+// Update the logRpcRequest function
+function logRpcRequest(req, messageId) {
+  const { method, params } = req.body;
+  const startTime = requestStartTimes.get(messageId);
+  const endTime = performance.now();
+  const duration = endTime - startTime;
+
+  let logEntry = `${method}`;
+  
+  if (params && Array.isArray(params)) {
+    logEntry += `, ${params.map(param => {
+      if (typeof param === 'object' && param !== null) {
+        return JSON.stringify(param);
+      }
+      return param;
+    }).join(', ')}`;
+  }
+  
+  logEntry += ` (${duration.toFixed(2)}ms)\n`;
+  
+  fs.appendFile('rpcRequests.log', logEntry, (err) => {
+    if (err) {
+      console.error('Error writing to log file:', err);
+    }
+  });
+
+  // Clean up the start time
+  requestStartTimes.delete(messageId);
 }
