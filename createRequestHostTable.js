@@ -3,8 +3,8 @@ const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client
 require('dotenv').config();
 const readline = require('readline');
 
-async function transferIpPointsForUser(OWNER, POINTS_TO_ADD) {
-  console.log(`Preparing to add ${POINTS_TO_ADD} points to ${OWNER}...`);
+async function createRequestHostTable() {
+  console.log("Preparing to create/reset request_host table...");
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -12,7 +12,7 @@ async function transferIpPointsForUser(OWNER, POINTS_TO_ADD) {
   });
 
   const confirmation = await new Promise(resolve => {
-    rl.question(`Are you sure you want to add ${POINTS_TO_ADD} points to ${OWNER}? (yes/no): `, answer => {
+    rl.question('Are you sure you want to create/reset the request_host table? (yes/no): ', answer => {
       resolve(answer.toLowerCase());
       rl.close();
     });
@@ -23,7 +23,7 @@ async function transferIpPointsForUser(OWNER, POINTS_TO_ADD) {
     return;
   }
 
-  console.log("Proceeding with point addition...");
+  console.log("Proceeding with table creation/reset...");
 
   const secret_name = process.env.RDS_SECRET_NAME;
   const client = new SecretsManagerClient({ 
@@ -58,30 +58,39 @@ async function transferIpPointsForUser(OWNER, POINTS_TO_ADD) {
 
     pool = new Pool(dbConfig);
 
-    const updatePointsQuery = `
-      INSERT INTO owner_points (owner, points)
-      VALUES ($1, $2)
-      ON CONFLICT (owner)
-      DO UPDATE SET points = owner_points.points + $2;
+    const dropTableQuery = `
+      DROP TABLE IF EXISTS request_host;
+    `;
+
+    const createTableQuery = `
+      CREATE TABLE request_host (
+        host VARCHAR(255) PRIMARY KEY,
+        n_requests INTEGER DEFAULT 0
+      );
     `;
 
     try {
       const dbClient = await pool.connect();
       try {
-        const result = await dbClient.query(updatePointsQuery, [OWNER, POINTS_TO_ADD]);
-        console.log(`Successfully added ${POINTS_TO_ADD} points to ${OWNER}`);
-        console.log(`Rows affected: ${result.rowCount}`);
+        // Drop the existing table
+        await dbClient.query(dropTableQuery);
+        console.log("Existing request_host table dropped (if it existed)");
+
+        // Create the new table
+        await dbClient.query(createTableQuery);
+        console.log("request_host table created successfully with host and n_requests columns");
       } finally {
         dbClient.release();
       }
     } catch (err) {
-      console.error(`Error updating points for ${OWNER}:`, err);
+      console.error('Error recreating request_host table:', err);
     } finally {
       await pool.end();
     }
   } catch (err) {
-    console.error('Error connecting to the database:', err);
+    console.error('Error creating request_host table:', err);
   }
 }
 
-// transferIpPointsForUser('', 0);
+createRequestHostTable();
+

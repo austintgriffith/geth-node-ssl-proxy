@@ -111,13 +111,13 @@ async function getFilteredConnectedClients() {
       // Filter rows with the largest block number
       const filteredRows = result.rows.filter(row => row.block_number === largestBlockNumber);
 
-      console.log("FILTERED ROWS", filteredRows);
+      // console.log("FILTERED ROWS", filteredRows);
       
       // Log connected clients in more detail
-      console.log("CONNECTED CLIENTS:", Array.from(connectedClients).map(client => ({
-        clientID: client.clientID,
-        ws: client.ws ? 'WebSocket Present' : 'No WebSocket'
-      })));
+      // console.log("CONNECTED CLIENTS:", Array.from(connectedClients).map(client => ({
+      //   clientID: client.clientID,
+      //   ws: client.ws ? 'WebSocket Present' : 'No WebSocket'
+      // })));
 
       // Create a Map of filtered clients
       const filteredClients = new Map();
@@ -236,10 +236,37 @@ async function incrementOwnerPoints(owner) {
 // Add this Map to store start times for each bgMessageId
 const requestStartTimes = new Map();
 
+// Add this function near the top of the file, with other function declarations
+async function updateRequestHost(reqHost) {
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      // Upsert query to insert or update the request_host table
+      const upsertQuery = `
+        INSERT INTO request_host (host, n_requests)
+        VALUES ($1, 1)
+        ON CONFLICT (host)
+        DO UPDATE SET n_requests = request_host.n_requests + 1
+      `;
+      await client.query(upsertQuery, [reqHost]);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error updating request_host:', err);
+  }
+}
+
 // Modify the POST route handler
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("\n\n📡 RPC REQUEST", req.body);
-  console.log("Request URL:", req.protocol + '://' + req.get('host') + req.originalUrl);
+  // console.log("🌐 Request URL:", req.protocol + '://' + req.get('host') + req.originalUrl);
+  let reqHost = req.get('host').split(':')[0];
+  console.log("🌐 Request URL:", reqHost);
+
+  // Call the new updateRequestHost function
+  await updateRequestHost(reqHost);
 
   const filteredConnectedClients = await getFilteredConnectedClients();
 
@@ -1491,18 +1518,18 @@ function logRpcRequest(req, messageId) {
   const endTime = performance.now();
   const duration = endTime - startTime;
 
-  let logEntry = `${method}`;
+  let logEntry = `${method}|`;
   
   if (params && Array.isArray(params)) {
-    logEntry += `, ${params.map(param => {
+    logEntry += params.map(param => {
       if (typeof param === 'object' && param !== null) {
         return JSON.stringify(param);
       }
       return param;
-    }).join(', ')}`;
+    }).join(',');
   }
   
-  logEntry += ` (${duration.toFixed(2)}ms)\n`;
+  logEntry += `|${duration.toFixed(3)}\n`;
   
   fs.appendFile('rpcRequests.log', logEntry, (err) => {
     if (err) {
@@ -1513,3 +1540,101 @@ function logRpcRequest(req, messageId) {
   // Clean up the start time
   requestStartTimes.delete(messageId);
 }
+
+app.get("/requesthost", async (req, res) => {
+  // console.log("/REQUESTHOSTS", req.headers.referer);
+
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT host, n_requests
+        FROM request_host
+        ORDER BY n_requests DESC
+      `);
+
+      let tableRows = result.rows.map(row => `
+        <tr>
+          <td>${row.host}</td>
+          <td>${row.n_requests}</td>
+        </tr>
+      `).join('');
+
+      res.send(`
+        <html>
+          <body>
+            <div style='padding:20px;font-size:18px'>
+              <h1>REQUEST HOSTS</h1>
+              <p>Total unique hosts: ${result.rows.length}</p>
+              <table border="1" cellpadding="5">
+                <tr>
+                  <th>Host</th>
+                  <th>Number of Requests</th>
+                </tr>
+                ${tableRows}
+              </table>
+            </div>
+          </body>
+        </html>
+      `);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving request hosts:', err);
+    res.status(500).send(`
+      <html>
+        <body>
+          <div style='padding:20px;font-size:18px'>
+            <h1>ERROR RETRIEVING REQUEST HOSTS</h1>
+            <p>An error occurred while trying to retrieve request hosts from the database.</p>
+            <p>Error details: ${err.message}</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+});
+
+app.get("/nodecontinents", async (req, res) => {
+  // console.log("/NODECONTINENTS", req.headers.referer);
+
+  try {
+    const pool = await getDbPool();
+    const client = await pool.connect();
+    try {
+      const result = await client.query(`
+        SELECT 
+          COALESCE(continent, 'Unknown') as continent, 
+          COUNT(*) as node_count
+        FROM node_status
+        WHERE last_checkin > NOW() - INTERVAL '5 minutes'
+        GROUP BY continent
+      `);
+
+      // Initialize the continents object with 0 counts
+      const continents = {
+        "North America": 0,
+        "South America": 0,
+        "Europe": 0,
+        "Asia": 0,
+        "Africa": 0
+      };
+
+      // Update counts based on query results
+      result.rows.forEach(row => {
+        if (continents.hasOwnProperty(row.continent)) {
+          continents[row.continent] = parseInt(row.node_count);
+        }
+      });
+
+      res.json({ continents });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error retrieving node continents:', err);
+    res.status(500).json({ error: "An error occurred while retrieving node continents" });
+  }
+});

@@ -1,6 +1,7 @@
 
 assignPoints.log
 rpcRequests.log
+ownerPointsTableBackup.txt
 .env
 jwt.hex
 node_modules
