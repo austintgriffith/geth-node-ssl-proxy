@@ -1613,13 +1613,13 @@ app.get("/nodecontinents", async (req, res) => {
         GROUP BY continent
       `);
 
-      // Initialize the continents object with 0 counts
       const continents = {
         "North America": 0,
         "South America": 0,
         "Europe": 0,
         "Asia": 0,
-        "Africa": 0
+        "Africa": 0,
+        "Australia": 0
       };
 
       // Update counts based on query results
