@@ -261,11 +261,22 @@ async function updateRequestHost(reqHost) {
 // Modify the POST route handler
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("\n\n📡 RPC REQUEST", req.body);
-  // console.log("🌐 Request URL:", req.protocol + '://' + req.get('host') + req.originalUrl);
-  let reqHost = req.get('host').split(':')[0];
-  console.log("🌐 Request URL:", reqHost);
+  
+  // Extract the origin from the Referer or Origin header
+  let reqHost = req.get('Referer') || req.get('Origin') || req.get('host');
+  
+  // Parse the URL to extract just the hostname
+  try {
+    const url = new URL(reqHost);
+    reqHost = url.hostname;
+  } catch (error) {
+    // If parsing fails, fall back to the original host
+    reqHost = req.get('host').split(':')[0];
+  }
 
-  // Call the new updateRequestHost function
+  console.log("🌐 Request Origin:", reqHost);
+
+  // Call the updateRequestHost function with the new reqHost
   await updateRequestHost(reqHost);
 
   const filteredConnectedClients = await getFilteredConnectedClients();
