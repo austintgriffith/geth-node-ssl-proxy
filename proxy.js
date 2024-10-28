@@ -237,7 +237,7 @@ async function incrementOwnerPoints(owner) {
 const requestStartTimes = new Map();
 
 // Add this function near the top of the file, with other function declarations
-async function updateRequestHost(reqHost) {
+async function updateRequestOrigin(reqHost) {
   try {
     const pool = await getDbPool();
     const client = await pool.connect();
@@ -276,8 +276,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
   console.log("🌐 Request Origin:", reqHost);
 
-  // Call the updateRequestHost function with the new reqHost
-  await updateRequestHost(reqHost);
+  await updateRequestOrigin(reqHost);
 
   const filteredConnectedClients = await getFilteredConnectedClients();
 
@@ -1552,9 +1551,7 @@ function logRpcRequest(req, messageId) {
   requestStartTimes.delete(messageId);
 }
 
-app.get("/requesthost", async (req, res) => {
-  // console.log("/REQUESTHOSTS", req.headers.referer);
-
+app.get("/requestorigins", async (req, res) => {
   try {
     const pool = await getDbPool();
     const client = await pool.connect();
@@ -1567,7 +1564,7 @@ app.get("/requesthost", async (req, res) => {
 
       let tableRows = result.rows.map(row => `
         <tr>
-          <td>${row.host}</td>
+          <td><a href="http://${row.host}" target="_blank">${row.host}</a></td>
           <td>${row.n_requests}</td>
         </tr>
       `).join('');
@@ -1576,11 +1573,11 @@ app.get("/requesthost", async (req, res) => {
         <html>
           <body>
             <div style='padding:20px;font-size:18px'>
-              <h1>REQUEST HOSTS</h1>
+              <h1>REQUEST ORIGINS</h1>
               <p>Total unique hosts: ${result.rows.length}</p>
               <table border="1" cellpadding="5">
                 <tr>
-                  <th>Host</th>
+                  <th>Origin</th>
                   <th>Number of Requests</th>
                 </tr>
                 ${tableRows}
