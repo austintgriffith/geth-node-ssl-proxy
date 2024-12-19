@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { performance } = require('perf_hooks');
+const { targetUrl } = require('../config');
 
 function logRpcRequest(req, messageId, requestStartTimes) {
   const { method, params } = req.body;
@@ -7,7 +8,25 @@ function logRpcRequest(req, messageId, requestStartTimes) {
   const endTime = performance.now();
   const duration = endTime - startTime;
 
-  let logEntry = `${method}|`;
+  // Get current date in UTC
+  const now = new Date();
+  const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
+  const epochTime = Math.floor(now.getTime() / 1000);
+
+  // Get request origin from headers
+  let reqHost = req.get('Referer') || req.get('Origin') || req.get('host');
+  try {
+    const url = new URL(reqHost);
+    reqHost = url.hostname;
+  } catch (error) {
+    reqHost = req.get('host').split(':')[0];
+  }
+
+  // Get peerId from the client that handled the request
+  // If handlingClient is null, it means we used the fallback URL
+  const peerId = req.handlingClient?.nodeStatusId || targetUrl;
+
+  let logEntry = `${utcTimestamp}|${epochTime}|${reqHost}|${peerId}|${method}|`;
   
   if (params && Array.isArray(params)) {
     logEntry += params.map(param => {

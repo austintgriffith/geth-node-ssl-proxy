@@ -239,7 +239,18 @@ app.post("/", validateRpcRequest, async (req, res) => {
   } else {
     console.log("NO CLIENTS CONNECTED, using fallback mechanism");
     try {
+      const clientIp = req.ip || req.connection.remoteAddress;
+      const messageId = generateMessageId(req.body, clientIp);
+      
+      // Store the start time for this messageId
+      requestStartTimes.set(messageId, performance.now());
+      
       const result = await makeFallbackRpcRequest(targetUrl, req.body, req.headers);
+      
+      // Log the RPC request with timing information
+      req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
+      logRpcRequest(req, messageId, requestStartTimes);
+      
       res.json(result);
     } catch (error) {
       res.status(500).json({
@@ -524,6 +535,11 @@ wss.on('connection', (ws) => {
           openMessage.res.json(responseWithOriginalId);
           openMessages.delete(messageId);
 
+          // Add client info to the request object
+          const filteredConnectedClients = await getFilteredConnectedClients(connectedClients);
+          const handlingClient = Array.from(filteredConnectedClients.values())
+            .find(c => c.clientID === client.clientID);
+          openMessage.req.handlingClient = handlingClient;
           // Log the RPC request with timing information
           logRpcRequest(openMessage.req, messageId, requestStartTimes);
 
