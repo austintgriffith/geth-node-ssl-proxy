@@ -571,12 +571,6 @@ wss.on('close', () => {
   clearInterval(interval);
 });
 
-function listConnectedClients() {
-  return Array.from(connectedClients).map((client, index) => {
-    return `Client ${index + 1}: (${client.clientID}) ${client.ws._socket.remoteAddress}:${client.ws._socket.remotePort}`;
-  });
-}
-
 // Start the HTTPS server (which now includes WebSocket)
 server.listen(httpsPort, () => {
   console.log(`HTTPS and WebSocket server listening on port ${httpsPort}...`);
