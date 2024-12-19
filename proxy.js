@@ -19,6 +19,7 @@ const { incrementRpcRequests } = require('./utils/incrementRpcRequests');
 const { incrementOwnerPoints } = require('./utils/incrementOwnerPoints');
 const { logRpcRequest } = require('./utils/logRpcRequest');
 const { getOwnerForClientId } = require('./utils/getOwnerForClientId');
+const { getFilteredConnectedClients } = require('./utils/getFilteredConnectedClients');
 
 const { 
   httpsPort, 
@@ -112,68 +113,6 @@ const checkForFallback = async () => {
   }
 }
 
-async function getFilteredConnectedClients() {
-  try {
-    const pool = await getDbPool();
-    const client = await pool.connect();
-    try {
-      const minutes = 5; // Default to 5 minutes
-      const result = await client.query(`
-        SELECT id, block_number, last_checkin, socket_id
-        FROM node_status
-        WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
-        ORDER BY block_number DESC
-      `);
-      
-      // Find the largest block number
-      const largestBlockNumber = result.rows.reduce((max, row) => 
-        row.block_number > max ? row.block_number : max, 0);
-
-      console.log("LARGEST BLOCK NUMBER", largestBlockNumber.toString());
-
-      // Filter rows with the largest block number
-      const filteredRows = result.rows.filter(row => row.block_number === largestBlockNumber);
-
-      // console.log("FILTERED ROWS", filteredRows);
-      
-      // Log connected clients in more detail
-      // console.log("CONNECTED CLIENTS:", Array.from(connectedClients).map(client => ({
-      //   clientID: client.clientID,
-      //   ws: client.ws ? 'WebSocket Present' : 'No WebSocket'
-      // })));
-
-      // Create a Map of filtered clients
-      const filteredClients = new Map();
-      filteredRows.forEach(row => {
-        //console.log(`Checking row with socket_id: ${row.socket_id}`);
-        if (row.socket_id) {
-          const matchingClient = Array.from(connectedClients).find(client => {
-            //console.log(`Comparing: ${client.clientID} with ${row.socket_id}`);
-            return client.clientID === row.socket_id;
-          });
-          if (matchingClient) {
-            //console.log(`Found matching client for socket_id: ${row.socket_id}`);
-            filteredClients.set(row.socket_id, {...matchingClient, nodeStatusId: row.id});  // Include nodeStatusId
-          } else {
-            //console.log(`No matching client found for socket_id: ${row.socket_id}`);
-            //console.log(`Available client IDs: ${Array.from(connectedClients).map(c => c.clientID).join(', ')}`);
-          }
-        }
-      });
-
-      console.log(`Total active clients: ${result.rows.length}`);
-      console.log(`Clients at latest block ${largestBlockNumber}: ${filteredClients.size}`);
-
-      return filteredClients;
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    console.error('Error in getFilteredConnectedClients:', err);
-    return new Map(); // Return an empty Map in case of error
-  }
-}
-
 async function makeRpcRequest(url, body, headers) {
   try {
     const response = await axios.post(url, body, {
@@ -238,7 +177,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
   await updateRequestOrigin(reqHost);
 
-  const filteredConnectedClients = await getFilteredConnectedClients();
+  const filteredConnectedClients = await getFilteredConnectedClients(connectedClients);
 
   if(filteredConnectedClients.size > 0) {
     const clientsArray = Array.from(filteredConnectedClients.values());
