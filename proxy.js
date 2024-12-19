@@ -14,6 +14,10 @@ const crypto = require('crypto');
 const { performance } = require('perf_hooks');
 const { getDbPool } = require('./utils/dbUtils');
 const { getIpLocation } = require('./utils/getIpLocation');
+const { updateRequestOrigin } = require('./utils/updateRequestOrigin');
+const { incrementRpcRequests } = require('./utils/incrementRpcRequests');
+const { incrementOwnerPoints } = require('./utils/incrementOwnerPoints');
+const { logRpcRequest } = require('./utils/logRpcRequest');
 
 const { 
   httpsPort, 
@@ -210,68 +214,8 @@ function generateMessageId(message, clientIp) {
   return hash.digest('hex');
 }
 
-async function incrementRpcRequests(clientID) {
-  try {
-    const pool = await getDbPool();
-    const client = await pool.connect();
-    try {
-      await client.query(`
-        UPDATE node_status
-        SET n_rpc_requests = COALESCE(n_rpc_requests, 0) + 1
-        WHERE socket_id = $1
-      `, [clientID]);
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    console.error('Error incrementing n_rpc_requests:', err);
-  }
-}
-
-// Add this function to increment points for an owner
-async function incrementOwnerPoints(owner) {
-  try {
-    const pool = await getDbPool();
-    const client = await pool.connect();
-    try {
-      await client.query(`
-        INSERT INTO owner_points (owner, points)
-        VALUES ($1, 10)
-        ON CONFLICT (owner)
-        DO UPDATE SET points = owner_points.points + 10
-      `, [owner]);
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    console.error('Error incrementing owner points:', err);
-  }
-}
-
 // Add this Map to store start times for each bgMessageId
 const requestStartTimes = new Map();
-
-// Add this function near the top of the file, with other function declarations
-async function updateRequestOrigin(reqHost) {
-  try {
-    const pool = await getDbPool();
-    const client = await pool.connect();
-    try {
-      // Upsert query to insert or update the request_host table
-      const upsertQuery = `
-        INSERT INTO request_host (host, n_requests)
-        VALUES ($1, 1)
-        ON CONFLICT (host)
-        DO UPDATE SET n_requests = request_host.n_requests + 1
-      `;
-      await client.query(upsertQuery, [reqHost]);
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    console.error('Error updating request_host:', err);
-  }
-}
 
 // Modify the POST route handler
 app.post("/", validateRpcRequest, async (req, res) => {
@@ -644,7 +588,7 @@ wss.on('connection', (ws) => {
           openMessages.delete(messageId);
 
           // Log the RPC request with timing information
-          logRpcRequest(openMessage.req, messageId);
+          logRpcRequest(openMessage.req, messageId, requestStartTimes);
 
           // Increment n_rpc_requests for the client that served the request
           await incrementRpcRequests(client.clientID);
@@ -748,41 +692,10 @@ async function getOwnerForClientId(clientId) {
   }
 }
 
-function logRpcRequest(req, messageId) {
-  const { method, params } = req.body;
-  const startTime = requestStartTimes.get(messageId);
-  const endTime = performance.now();
-  const duration = endTime - startTime;
-
-  let logEntry = `${method}|`;
-  
-  if (params && Array.isArray(params)) {
-    logEntry += params.map(param => {
-      if (typeof param === 'object' && param !== null) {
-        return JSON.stringify(param);
-      }
-      return param;
-    }).join(',');
-  }
-  
-  logEntry += `|${duration.toFixed(3)}\n`;
-  
-  fs.appendFile('rpcRequests.log', logEntry, (err) => {
-    if (err) {
-      console.error('Error writing to log file:', err);
-    }
-  });
-
-  // Clean up the start time
-  requestStartTimes.delete(messageId);
-}
-
 module.exports = {
   app,
   connectedClients,
   openMessages,
   requestStartTimes,
-  // incrementRpcRequests,
-  // incrementOwnerPoints,
   getOwnerForClientId
 };
