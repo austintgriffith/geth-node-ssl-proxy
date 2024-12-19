@@ -73,21 +73,8 @@ process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
 
 app.use(bodyParser.json());
 app.use(cors());
-//app.use(express.json())
-//app.use(express.bodyParser());
-//app.use(bodyParser.json());
-
-// var proxy = httpProxy.createProxyServer();
-
-// var last = "";
-
-require('./routes/nodecontinents');
-
-// let fallbackUrl = "";
 
 const checkForFallback = async () => {
-  // console.log("Checking for fallback URL...");
-
   try {
     const pool = await getDbPool();
     const client = await pool.connect();
