@@ -46,6 +46,7 @@ const letathousandscaffoldethsbloomRouter = require('./routes/letathousandscaffo
 const blockRouter = require('./routes/block');
 const syncRouter = require('./routes/sync');
 const checkinRouter = require('./routes/checkin');
+const dashboardRouter = require('./routes/dashboard');
 
 app.use(nodeContinentsRouter);
 app.use(requestOriginsRouter);
@@ -63,6 +64,7 @@ app.use(letathousandscaffoldethsbloomRouter);
 app.use(blockRouter);
 app.use(syncRouter);
 app.use(checkinRouter);
+app.use(dashboardRouter);
 
 EventEmitter.defaultMaxListeners = 20; // Increase the default max listeners
 
