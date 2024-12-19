@@ -29,13 +29,19 @@ async function getDbConfig() {
       password: secret.password,
       database: secret.dbname || 'postgres',
       port: 5432,
-      ssl: true
+      ssl: {
+        rejectUnauthorized: true,
+        ca: require('ssl-root-cas').create().addFile('./rds-ca-2019-root.pem')
+      }
     };
   } catch (error) {
     console.error("Error fetching database secret:", error);
     throw error;
   }
 }
+
+// RDS certificate downloaded using:
+// curl -o rds-ca-2019-root.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 
 async function getDbPool() {
   if (!pool) {

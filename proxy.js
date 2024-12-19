@@ -68,8 +68,8 @@ EventEmitter.defaultMaxListeners = 20; // Increase the default max listeners
 
 const openMessages = new Map();
 
-https.globalAgent.options.ca = require("ssl-root-cas").create();
-process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
+https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
+// process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
 
 app.use(bodyParser.json());
 app.use(cors());
@@ -100,19 +100,26 @@ const checkForFallback = async () => {
   }
 }
 
-async function makeRpcRequest(url, body, headers) {
+async function makeFallbackRpcRequest(url, body, headers) {
   try {
+    // Create a new headers object without the problematic host header
+    const cleanedHeaders = { ...headers };
+    delete cleanedHeaders.host; // Remove the host header to let axios set it correctly
+
     const response = await axios.post(url, body, {
       headers: {
         "Content-Type": "application/json",
-        ...headers,
+        ...cleanedHeaders,
       },
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: true
+      })
     });
     return response.data;
   } catch (error) {
     console.error("RPC request error:", error);
     if (error.response && error.response.data) {
-      return error.response.data;
+      throw error.response.data;
     }
     throw error;
   }
@@ -232,7 +239,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
   } else {
     console.log("NO CLIENTS CONNECTED, using fallback mechanism");
     try {
-      const result = await makeRpcRequest(targetUrl, req.body, req.headers);
+      const result = await makeFallbackRpcRequest(targetUrl, req.body, req.headers);
       res.json(result);
     } catch (error) {
       res.status(500).json({
@@ -254,6 +261,9 @@ app.get("/", (req, res) => {
   console.log("GET", req.headers.referer);
   axios
     .get(targetUrl, {
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: true,
+      }),
       headers: {
         ...req.headers,
       },
