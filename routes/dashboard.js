@@ -175,6 +175,15 @@ router.get('/dashboard', (req, res) => {
       const nodeRequestsPerHour = timePoints.map(hour => requestsByHour[hour]);
       const fallbackRequestsPerHour = timePoints.map(hour => fallbackRequestsByHour[hour]);
 
+      // Prepare data for line plot
+      const nodeDurations = logEntries
+        .filter(entry => entry.peerId !== fallbackUrl)
+        .map(entry => ({ x: entry.utcTimestamp, y: entry.duration }));
+
+      const fallbackDurations = logEntries
+        .filter(entry => entry.peerId === fallbackUrl)
+        .map(entry => ({ x: entry.utcTimestamp, y: entry.duration }));
+
       res.send(`
         <html>
           <head>
@@ -320,14 +329,25 @@ router.get('/dashboard', (req, res) => {
 
                 Plotly.newPlot('requestsPerHourChart', hourlyLineData, hourlyLineLayout);
 
-                // Line plot
-                const lineData = [{
-                  x: ${JSON.stringify(timestamps)},
-                  y: ${JSON.stringify(durations)},
-                  type: 'scatter',
-                  mode: 'lines',
-                  name: 'Duration'
-                }];
+                // Line plot for request durations over time
+                const lineData = [
+                  {
+                    x: ${JSON.stringify(nodeDurations.map(d => d.x))},
+                    y: ${JSON.stringify(nodeDurations.map(d => d.y))},
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Node Request Duration',
+                    line: { color: '#1f77b4' }  // Blue
+                  },
+                  {
+                    x: ${JSON.stringify(fallbackDurations.map(d => d.x))},
+                    y: ${JSON.stringify(fallbackDurations.map(d => d.y))},
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Fallback Request Duration',
+                    line: { color: '#ff0000' }  // Red
+                  }
+                ];
 
                 const lineLayout = {
                   title: 'Request Durations Over Time',
@@ -337,7 +357,14 @@ router.get('/dashboard', (req, res) => {
                   yaxis: {
                     title: 'Duration (ms)'
                   },
-                  height: 800
+                  height: 800,
+                  showlegend: true,
+                  legend: {
+                    y: -0.1,  // Move legend below chart
+                    x: 0.5,
+                    xanchor: 'center',
+                    orientation: 'h'
+                  }
                 };
 
                 Plotly.newPlot('lineChart', lineData, lineLayout);
