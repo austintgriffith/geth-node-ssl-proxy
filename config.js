@@ -1,7 +1,6 @@
 // Server configuration
 const httpsPort = 48544;
-const targetUrl = "https://office.buidlguidl.com:48544";
-const localProviderUrl = "https://office.buidlguidl.com:48544/";
+const fallbackUrl = "https://office.buidlguidl.com:48544";
 
 // WebSocket configuration
 const wsHeartbeatInterval = 30000; // 30 seconds
@@ -14,8 +13,7 @@ const defaultQueryMinutes = 5;
 module.exports = {
   // Server
   httpsPort,
-  targetUrl,
-  localProviderUrl,
+  fallbackUrl,
   
   // WebSocket
   wsHeartbeatInterval,

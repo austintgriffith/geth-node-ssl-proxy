@@ -1,6 +1,6 @@
 const fs = require('fs');
 const { performance } = require('perf_hooks');
-const { targetUrl } = require('../config');
+const { fallbackUrl } = require('../config');
 
 function logRpcRequest(req, messageId, requestStartTimes) {
   const { method, params } = req.body;
@@ -24,7 +24,7 @@ function logRpcRequest(req, messageId, requestStartTimes) {
 
   // Get peerId from the client that handled the request
   // If handlingClient is null, it means we used the fallback URL
-  const peerId = req.handlingClient?.nodeStatusId || targetUrl;
+  const peerId = req.handlingClient?.nodeStatusId || fallbackUrl;
 
   let logEntry = `${utcTimestamp}|${epochTime}|${reqHost}|${peerId}|${method}|`;
   

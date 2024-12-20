@@ -23,8 +23,7 @@ const { getFilteredConnectedClients } = require('./utils/getFilteredConnectedCli
 
 const { 
   httpsPort, 
-  targetUrl, 
-  localProviderUrl,
+  fallbackUrl, 
   wsHeartbeatInterval,
   wsMessageTimeout,
   messageCleanupInterval 
@@ -247,7 +246,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
       // Store the start time for this messageId
       requestStartTimes.set(messageId, performance.now());
       
-      const result = await makeFallbackRpcRequest(targetUrl, req.body, req.headers);
+      const result = await makeFallbackRpcRequest(fallbackUrl, req.body, req.headers);
       
       // Log the RPC request with timing information
       req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
@@ -273,7 +272,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
 app.get("/", (req, res) => {
   console.log("GET", req.headers.referer);
   axios
-    .get(targetUrl, {
+    .get(fallbackUrl, {
       httpsAgent: new https.Agent({
         rejectUnauthorized: true,
       }),
