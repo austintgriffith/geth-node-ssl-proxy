@@ -86,6 +86,21 @@ router.get('/dashboard', (req, res) => {
       const hostNames = Object.keys(hostRequestCounts);
       const hostCounts = hostNames.map(host => hostRequestCounts[host]);
 
+      // Group data by hour for requests/hour plot
+      const hourlyData = {};
+      logEntries.forEach(entry => {
+        // Get the hour from the UTC timestamp (format: "YYYY-MM-DD HH:mm:ss")
+        const hour = entry.utcTimestamp.substring(0, 13); // Gets "YYYY-MM-DD HH"
+        if (!hourlyData[hour]) {
+          hourlyData[hour] = 0;
+        }
+        hourlyData[hour]++;
+      });
+
+      // Convert to arrays for plotting, sorted by hour
+      const hours = Object.keys(hourlyData).sort();
+      const requestsPerHour = hours.map(hour => hourlyData[hour]);
+
       console.log('Rendering response...');
 
       res.send(`
@@ -102,28 +117,50 @@ router.get('/dashboard', (req, res) => {
           </head>
           <body>
             <div class="chart-container">
-              <h2>RPC Request Durations Over Time</h2>
+              <div id="requestsPerHourChart"></div>
+            </div>
+            <div class="chart-container">
               <div id="lineChart"></div>
             </div>
             <div class="chart-container">
-              <h2>Request Count by Node</h2>
               <div id="barChart"></div>
             </div>
             <div class="chart-container">
-              <h2>Request Duration Distribution by Node</h2>
               <div id="boxChart"></div>
             </div>
             <div class="chart-container">
-              <h2>Request Count by Host</h2>
               <div id="hostBarChart"></div>
             </div>
             <div class="chart-container">
-              <h2>Request Duration Distribution by Host</h2>
               <div id="reqHostBoxChart"></div>
             </div>
             <script>
               try {
                 console.log('Initializing plots...');
+
+                // Requests per hour line plot
+                const hourlyLineData = [{
+                  x: ${JSON.stringify(hours)},
+                  y: ${JSON.stringify(requestsPerHour)},
+                  type: 'scatter',
+                  mode: 'lines',
+                  name: 'Requests'
+                }];
+
+                const hourlyLineLayout = {
+                  title: 'Number of Requests per Hour',
+                  xaxis: {
+                    title: 'Hour (UTC)',
+                    tickangle: 45
+                  },
+                  yaxis: {
+                    title: 'Number of Requests'
+                  },
+                  height: 500
+                };
+
+                Plotly.newPlot('requestsPerHourChart', hourlyLineData, hourlyLineLayout);
+                console.log('Requests per hour plot created');
 
                 // Line plot
                 const lineData = [{
