@@ -101,6 +101,37 @@ router.get('/dashboard', (req, res) => {
       const hours = Object.keys(hourlyData).sort();
       const requestsPerHour = hours.map(hour => hourlyData[hour]);
 
+      // Count requests per method
+      const methodRequestCounts = {};
+      logEntries.forEach(entry => {
+        if (!methodRequestCounts[entry.method]) {
+          methodRequestCounts[entry.method] = 0;
+        }
+        methodRequestCounts[entry.method]++;
+      });
+
+      // Convert to arrays for plotting
+      const methodNames = Object.keys(methodRequestCounts);
+      const methodCounts = methodNames.map(method => methodRequestCounts[method]);
+
+      // Group data by method for box plot
+      const methodData = {};
+      logEntries.forEach(entry => {
+        if (!methodData[entry.method]) {
+          methodData[entry.method] = [];
+        }
+        methodData[entry.method].push(entry.duration);
+      });
+
+      // Prepare data for method box plot
+      const methodBoxPlotData = methodNames.map(method => ({
+        y: methodData[method],
+        name: method,
+        type: 'box',
+        boxpoints: false,
+        showlegend: true
+      }));
+
       console.log('Rendering response...');
 
       res.send(`
@@ -134,6 +165,12 @@ router.get('/dashboard', (req, res) => {
             <div class="chart-container">
               <div id="reqHostBoxChart"></div>
             </div>
+            <div class="chart-container">
+              <div id="methodBarChart"></div>
+            </div>
+            <div class="chart-container">
+              <div id="methodBoxChart"></div>
+            </div>
             <script>
               try {
                 console.log('Initializing plots...');
@@ -156,7 +193,7 @@ router.get('/dashboard', (req, res) => {
                   yaxis: {
                     title: 'Number of Requests'
                   },
-                  height: 500
+                  height: 800
                 };
 
                 Plotly.newPlot('requestsPerHourChart', hourlyLineData, hourlyLineLayout);
@@ -179,7 +216,7 @@ router.get('/dashboard', (req, res) => {
                   yaxis: {
                     title: 'Duration (ms)'
                   },
-                  height: 500
+                  height: 800
                 };
 
                 Plotly.newPlot('lineChart', lineData, lineLayout);
@@ -202,7 +239,7 @@ router.get('/dashboard', (req, res) => {
                   yaxis: {
                     title: 'Number of Requests'
                   },
-                  height: 500,
+                  height: 800,
                   margin: {
                     b: 150  // Increase bottom margin for rotated labels
                   }
@@ -222,7 +259,7 @@ router.get('/dashboard', (req, res) => {
                   xaxis: {
                     tickangle: 45
                   },
-                  height: 600,
+                  height: 800,
                   margin: {
                     b: 200  // Increase bottom margin for rotated labels
                   }
@@ -242,7 +279,7 @@ router.get('/dashboard', (req, res) => {
                   xaxis: {
                     tickangle: 45
                   },
-                  height: 600,
+                  height: 800,
                   margin: {
                     b: 200  // Increase bottom margin for rotated labels
                   },
@@ -278,7 +315,7 @@ router.get('/dashboard', (req, res) => {
                   yaxis: {
                     title: 'Number of Requests'
                   },
-                  height: 500,
+                  height: 800,
                   margin: {
                     b: 150  // Increase bottom margin for rotated labels
                   }
@@ -286,6 +323,62 @@ router.get('/dashboard', (req, res) => {
 
                 Plotly.newPlot('hostBarChart', hostBarData, hostBarLayout);
                 console.log('Host Bar plot created');
+
+                // Method Bar plot
+                const methodBarData = [{
+                  x: ${JSON.stringify(methodNames)},
+                  y: ${JSON.stringify(methodCounts)},
+                  type: 'bar',
+                  name: 'Requests'
+                }];
+
+                const methodBarLayout = {
+                  title: 'Number of Requests per Method',
+                  xaxis: {
+                    title: 'Method',
+                    tickangle: 45
+                  },
+                  yaxis: {
+                    title: 'Number of Requests'
+                  },
+                  height: 800,
+                  margin: {
+                    b: 150  // Increase bottom margin for rotated labels
+                  }
+                };
+
+                Plotly.newPlot('methodBarChart', methodBarData, methodBarLayout);
+                console.log('Method Bar plot created');
+
+                // Method box plot
+                const methodBoxPlotData = ${JSON.stringify(methodBoxPlotData)};
+                const methodBoxLayout = {
+                  title: 'Request Duration Distribution by Method',
+                  yaxis: {
+                    title: 'Duration (ms)',
+                    autorange: true
+                  },
+                  xaxis: {
+                    tickangle: 45
+                  },
+                  height: 800,
+                  margin: {
+                    b: 200  // Increase bottom margin for rotated labels
+                  },
+                  showlegend: true,
+                  legend: {
+                    orientation: 'h',
+                    y: -0.4,
+                    x: 0.5,
+                    xanchor: 'center',
+                    bgcolor: '#E2E2E2',
+                    bordercolor: '#FFFFFF',
+                    borderwidth: 2
+                  }
+                };
+
+                Plotly.newPlot('methodBoxChart', methodBoxPlotData, methodBoxLayout);
+                console.log('Method box plot created');
 
               } catch (error) {
                 console.error('Error creating plots:', error);
