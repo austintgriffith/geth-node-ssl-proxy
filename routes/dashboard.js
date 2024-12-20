@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { fallbackUrl } = require('../config');
 const router = express.Router();
 
 router.get('/dashboard', (req, res) => {
@@ -133,6 +134,47 @@ router.get('/dashboard', (req, res) => {
         showlegend: true
       }));
 
+      // Calculate requests and average duration for the last hour
+      const now = new Date();
+      const oneHourAgo = new Date(now - 60 * 60 * 1000);
+      const lastHourEntries = logEntries.filter(entry => {
+        const entryTime = new Date(entry.utcTimestamp);
+        return entryTime >= oneHourAgo;
+      });
+      const requestsLastHour = lastHourEntries.length;
+      const avgDurationLastHour = lastHourEntries.length > 0 
+        ? lastHourEntries.reduce((sum, entry) => sum + entry.duration, 0) / lastHourEntries.length
+        : 0;
+      const fallbackRequestsLastHour = lastHourEntries.filter(entry => 
+        entry.peerId === fallbackUrl
+      ).length;
+
+      // Group requests by hour, separating fallback and node requests
+      const requestsByHour = {};
+      const fallbackRequestsByHour = {};
+      
+      logEntries.forEach(entry => {
+        const hour = new Date(entry.utcTimestamp).toISOString().slice(0, 13) + ':00:00';
+        
+        // Initialize if not exists
+        if (!requestsByHour[hour]) {
+          requestsByHour[hour] = 0;
+          fallbackRequestsByHour[hour] = 0;
+        }
+        
+        // Count fallback vs node requests separately
+        if (entry.peerId === fallbackUrl) {
+          fallbackRequestsByHour[hour]++;
+        } else {
+          requestsByHour[hour]++;
+        }
+      });
+
+      // Convert to arrays for plotting
+      const timePoints = Object.keys(requestsByHour).sort();
+      const nodeRequestsPerHour = timePoints.map(hour => requestsByHour[hour]);
+      const fallbackRequestsPerHour = timePoints.map(hour => fallbackRequestsByHour[hour]);
+
       res.send(`
         <html>
           <head>
@@ -141,7 +183,7 @@ router.get('/dashboard', (req, res) => {
               .chart-container {
                 margin: 20px;
                 padding: 20px;
-                border: 1px solid #ddd;
+                border: 2px solid #8c8c8c;
               }
               .divider {
                 text-align: center;
@@ -151,6 +193,9 @@ router.get('/dashboard', (req, res) => {
             </style>
           </head>
           <body>
+            <div class="chart-container">
+              <div id="gaugeChart"></div>
+            </div>
             <div class="chart-container">
               <div id="requestsPerHourChart"></div>
             </div>
@@ -180,17 +225,82 @@ router.get('/dashboard', (req, res) => {
             </div>
             <script>
               try {
+                // Gauge charts for requests and duration in last hour
+                const gaugeData = [
+                  {
+                    type: "indicator",
+                    mode: "gauge+number",
+                    value: ${requestsLastHour},
+                    title: { text: "Total Requests in Last Hour" },
+                    gauge: {
+                      axis: { range: [null, ${Math.max(requestsLastHour * 2, 100)}] },
+                      bar: { color: "#1f77b4" },
+                      bgcolor: "white",
+                      borderwidth: 2,
+                      bordercolor: "gray",
+                    },
+                    domain: { row: 0, column: 0 }
+                  },
+                  {
+                    type: "indicator",
+                    mode: "gauge+number",
+                    value: ${fallbackRequestsLastHour},
+                    title: { text: "Fallback Requests in Last Hour" },
+                    gauge: {
+                      axis: { range: [0, ${Math.max(requestsLastHour, 100)}] },
+                      bar: { color: "#ff0000" },
+                      bgcolor: "white",
+                      borderwidth: 2,
+                      bordercolor: "gray",
+                    },
+                    domain: { row: 0, column: 1 }
+                  },
+                  {
+                    type: "indicator",
+                    mode: "gauge+number",
+                    value: ${avgDurationLastHour.toFixed(2)},
+                    title: { text: "Avg Duration Last Hour (ms)" },
+                    gauge: {
+                      axis: { range: [0, ${Math.max(avgDurationLastHour * 2, 100)}] },
+                      bar: { color: "#2ca02c" },
+                      bgcolor: "white",
+                      borderwidth: 2,
+                      bordercolor: "gray",
+                    },
+                    domain: { row: 0, column: 2 }
+                  }
+                ];
+
+                const gaugeLayout = {
+                  grid: { rows: 1, columns: 3, pattern: 'independent' },
+                  height: 300,
+                  margin: { t: 50, r: 25, l: 25, b: 25 }
+                };
+
+                Plotly.newPlot('gaugeChart', gaugeData, gaugeLayout);
+
                 // Requests per hour line plot
-                const hourlyLineData = [{
-                  x: ${JSON.stringify(hours)},
-                  y: ${JSON.stringify(requestsPerHour)},
-                  type: 'scatter',
-                  mode: 'lines',
-                  name: 'Requests'
-                }];
+                const hourlyLineData = [
+                  {
+                    x: ${JSON.stringify(timePoints)},
+                    y: ${JSON.stringify(nodeRequestsPerHour)},
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Node Requests',
+                    line: { color: '#1f77b4' }  // Blue
+                  },
+                  {
+                    x: ${JSON.stringify(timePoints)},
+                    y: ${JSON.stringify(fallbackRequestsPerHour)},
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Fallback Requests',
+                    line: { color: '#ff0000' }  // Red
+                  }
+                ];
 
                 const hourlyLineLayout = {
-                  title: 'Number of Requests per Hour',
+                  title: 'Requests per Hour',
                   xaxis: {
                     title: 'Hour (UTC)',
                     tickangle: 45
@@ -198,7 +308,14 @@ router.get('/dashboard', (req, res) => {
                   yaxis: {
                     title: 'Number of Requests'
                   },
-                  height: 800
+                  height: 800,
+                  showlegend: true,
+                  legend: {
+                    y: -0.1,  // Move legend below chart
+                    x: 0.5,
+                    xanchor: 'center',
+                    orientation: 'h'
+                  }
                 };
 
                 Plotly.newPlot('requestsPerHourChart', hourlyLineData, hourlyLineLayout);
@@ -264,6 +381,13 @@ router.get('/dashboard', (req, res) => {
                   height: 800,
                   margin: {
                     b: 200  // Increase bottom margin for rotated labels
+                  },
+                  showlegend: true,
+                  legend: {
+                    orientation: 'h',     // horizontal legend
+                    y: -0.5,             // position below the plot
+                    x: 0.5,              // center horizontally
+                    xanchor: 'center'    // anchor point for centering
                   }
                 };
 
