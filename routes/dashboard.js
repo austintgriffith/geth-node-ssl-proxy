@@ -144,6 +144,11 @@ router.get('/dashboard', (req, res) => {
                 padding: 20px;
                 border: 1px solid #ddd;
               }
+              .divider {
+                text-align: center;
+                font-weight: bold;
+                margin: 60px 0px;
+              }
             </style>
           </head>
           <body>
@@ -153,18 +158,21 @@ router.get('/dashboard', (req, res) => {
             <div class="chart-container">
               <div id="lineChart"></div>
             </div>
+            <h2 class="divider">BY NODE</h2>
             <div class="chart-container">
               <div id="barChart"></div>
             </div>
             <div class="chart-container">
               <div id="boxChart"></div>
             </div>
+            <h2 class="divider">BY HOST</h2>
             <div class="chart-container">
               <div id="hostBarChart"></div>
             </div>
             <div class="chart-container">
               <div id="reqHostBoxChart"></div>
             </div>
+            <h2 class="divider">BY METHOD</h2>
             <div class="chart-container">
               <div id="methodBarChart"></div>
             </div>
