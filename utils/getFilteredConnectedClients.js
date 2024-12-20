@@ -17,7 +17,7 @@ async function getFilteredConnectedClients(connectedClients) {
       const largestBlockNumber = result.rows.reduce((max, row) => 
         row.block_number > max ? row.block_number : max, 0);
 
-      console.log("LARGEST BLOCK NUMBER", largestBlockNumber.toString());
+      console.log("🔭 largest block number:", largestBlockNumber.toString());
 
       // Filter rows with the largest block number
       const filteredRows = result.rows.filter(row => row.block_number === largestBlockNumber);
@@ -35,8 +35,8 @@ async function getFilteredConnectedClients(connectedClients) {
         }
       });
 
-      console.log(`Total active clients: ${result.rows.length}`);
-      console.log(`Clients at latest block ${largestBlockNumber}: ${filteredClients.size}`);
+      console.log(`👥 Total active clients: ${result.rows.length}`);
+      console.log(`🔌 Clients at latest block ${largestBlockNumber}: ${filteredClients.size}`);
 
       return filteredClients;
     } finally {

@@ -6,7 +6,6 @@ const fs = require("fs");
 var cors = require("cors");
 var bodyParser = require("body-parser");
 const app = express();
-const publicClient = require('./utils/publicClient');
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const EventEmitter = require('events');
@@ -20,6 +19,10 @@ const { incrementOwnerPoints } = require('./utils/incrementOwnerPoints');
 const { logRpcRequest } = require('./utils/logRpcRequest');
 const { getOwnerForClientId } = require('./utils/getOwnerForClientId');
 const { getFilteredConnectedClients } = require('./utils/getFilteredConnectedClients');
+const { checkForFallback } = require('./utils/checkForFallback');
+const { makeFallbackRpcRequest } = require('./utils/makeFallbackRpcRequest');
+const { validateRpcRequest } = require('./utils/validateRpcRequest');
+const { generateMessageId } = require('./utils/generateMessageId');
 
 const { 
   httpsPort, 
@@ -75,86 +78,13 @@ https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql conn
 app.use(bodyParser.json());
 app.use(cors());
 
-const checkForFallback = async () => {
-  try {
-    const pool = await getDbPool();
-    const client = await pool.connect();
-    try {
-      const minutes = 5; // Set to 5 minutes
-      const result = await client.query(`
-        SELECT id, block_number
-        FROM node_status
-        WHERE last_checkin > NOW() - INTERVAL '${minutes} minutes'
-        ORDER BY block_number DESC
-      `);
-
-      // console.log(`Active nodes in the last ${minutes} minutes:`);
-      // result.rows.forEach(row => {
-      //   console.log(`ID: ${row.id}, Block Number: ${row.block_number}`);
-      // });
-
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    console.error('Error checking for fallback:', err);
-  }
-}
-
-async function makeFallbackRpcRequest(url, body, headers) {
-  try {
-    // Create a new headers object without the problematic host header
-    const cleanedHeaders = { ...headers };
-    delete cleanedHeaders.host; // Remove the host header to let axios set it correctly
-
-    const response = await axios.post(url, body, {
-      headers: {
-        "Content-Type": "application/json",
-        ...cleanedHeaders,
-      },
-      httpsAgent: new https.Agent({
-        rejectUnauthorized: true
-      })
-    });
-    return response.data;
-  } catch (error) {
-    console.error("RPC request error:", error);
-    if (error.response && error.response.data) {
-      throw error.response.data;
-    }
-    throw error;
-  }
-}
-
-function validateRpcRequest(req, res, next) {
-  const { jsonrpc, method, id } = req.body;
-  if (jsonrpc !== "2.0" || !method || id === undefined) {
-    return res.status(400).send({
-      jsonrpc: "2.0",
-      id: null,
-      error: {
-        code: -32600,
-        message: "Invalid Request",
-        data: "The JSON sent is not a valid Request object"
-      }
-    });
-  }
-  next();
-}
-
-function generateMessageId(message, clientIp) {
-  const hash = crypto.createHash('sha256');
-  const timestamp = Date.now();
-  hash.update(JSON.stringify(message) + clientIp + timestamp);
-  return hash.digest('hex');
-}
-
 // Add this Map to store start times for each bgMessageId
 const requestStartTimes = new Map();
 
 // Modify the POST route handler
 app.post("/", validateRpcRequest, async (req, res) => {
-  console.log("\n\n📡 RPC REQUEST", req.body);
+  console.log("--------------------------------------------------------");
+  console.log("📡 RPC REQUEST", req.body);
   
   // Extract the origin from the Referer or Origin header
   let reqHost = req.get('Referer') || req.get('Origin') || req.get('host');
@@ -183,7 +113,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
         const clientIp = req.ip || req.connection.remoteAddress;
         const messageId = generateMessageId(req.body, clientIp);
 
-        console.log('Adding new open message with id:', messageId);
+        console.log('➕ Adding new open message with id:', messageId);
         openMessages.set(messageId, { req, res, timestamp: Date.now(), rpcId: req.body.id });
 
         // Store the start time for this messageId
@@ -526,7 +456,7 @@ wss.on('connection', (ws) => {
         console.log('Received message:', parsedMessage);
         
         if (messageId && openMessages.has(messageId)) {
-          console.log(`Found matching open message with id ${messageId}. Sending response.`);
+          console.log(`📲 Found matching open message with id ${messageId}. Sending response.`);
           const openMessage = openMessages.get(messageId);
           const responseWithOriginalId = {
             ...parsedMessage,

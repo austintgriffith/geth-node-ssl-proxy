@@ -4,6 +4,7 @@ const path = require('path');
 const router = express.Router();
 
 router.get('/dashboard', (req, res) => {
+  console.log('/dashboard');
   fs.readFile(path.join(__dirname, '../rpcRequests.log'), 'utf8', (err, data) => {
     if (err) {
       console.error('Error reading log file:', err);
@@ -132,8 +133,6 @@ router.get('/dashboard', (req, res) => {
         showlegend: true
       }));
 
-      console.log('Rendering response...');
-
       res.send(`
         <html>
           <head>
@@ -181,8 +180,6 @@ router.get('/dashboard', (req, res) => {
             </div>
             <script>
               try {
-                console.log('Initializing plots...');
-
                 // Requests per hour line plot
                 const hourlyLineData = [{
                   x: ${JSON.stringify(hours)},
@@ -205,7 +202,6 @@ router.get('/dashboard', (req, res) => {
                 };
 
                 Plotly.newPlot('requestsPerHourChart', hourlyLineData, hourlyLineLayout);
-                console.log('Requests per hour plot created');
 
                 // Line plot
                 const lineData = [{
@@ -228,7 +224,6 @@ router.get('/dashboard', (req, res) => {
                 };
 
                 Plotly.newPlot('lineChart', lineData, lineLayout);
-                console.log('Line plot created');
 
                 // Bar plot
                 const barData = [{
@@ -254,7 +249,6 @@ router.get('/dashboard', (req, res) => {
                 };
 
                 Plotly.newPlot('barChart', barData, barLayout);
-                console.log('Bar plot created');
 
                 // Box plot
                 const boxPlotData = ${JSON.stringify(boxPlotData)};
@@ -274,7 +268,6 @@ router.get('/dashboard', (req, res) => {
                 };
 
                 Plotly.newPlot('boxChart', boxPlotData, boxLayout);
-                console.log('Box plot created');
 
                 // Request Host box plot
                 const reqHostBoxPlotData = ${JSON.stringify(reqHostBoxPlotData)};
@@ -304,7 +297,6 @@ router.get('/dashboard', (req, res) => {
                 };
 
                 Plotly.newPlot('reqHostBoxChart', reqHostBoxPlotData, reqHostBoxLayout);
-                console.log('Request Host box plot created');
 
                 // Host Bar plot
                 const hostBarData = [{
@@ -330,7 +322,6 @@ router.get('/dashboard', (req, res) => {
                 };
 
                 Plotly.newPlot('hostBarChart', hostBarData, hostBarLayout);
-                console.log('Host Bar plot created');
 
                 // Method Bar plot
                 const methodBarData = [{
@@ -356,7 +347,6 @@ router.get('/dashboard', (req, res) => {
                 };
 
                 Plotly.newPlot('methodBarChart', methodBarData, methodBarLayout);
-                console.log('Method Bar plot created');
 
                 // Method box plot
                 const methodBoxPlotData = ${JSON.stringify(methodBoxPlotData)};
@@ -386,7 +376,6 @@ router.get('/dashboard', (req, res) => {
                 };
 
                 Plotly.newPlot('methodBoxChart', methodBoxPlotData, methodBoxLayout);
-                console.log('Method box plot created');
 
               } catch (error) {
                 console.error('Error creating plots:', error);
@@ -395,8 +384,6 @@ router.get('/dashboard', (req, res) => {
           </body>
         </html>
       `);
-      
-      console.log('Response sent');
     } catch (error) {
       console.error('Error processing data:', error);
       res.status(500).send(`Error processing data: ${error.message}`);
