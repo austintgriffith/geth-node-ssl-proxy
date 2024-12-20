@@ -28,6 +28,15 @@ router.get('/dashboard', (req, res) => {
         peerData[entry.peerId].push(entry.duration);
       });
 
+      // Group data by reqHost for box plot
+      const reqHostData = {};
+      logEntries.forEach(entry => {
+        if (!reqHostData[entry.reqHost]) {
+          reqHostData[entry.reqHost] = [];
+        }
+        reqHostData[entry.reqHost].push(entry.duration);
+      });
+
       // Prepare data for line plot
       const timestamps = logEntries.map(entry => entry.utcTimestamp);
       const durations = logEntries.map(entry => entry.duration);
@@ -40,6 +49,42 @@ router.get('/dashboard', (req, res) => {
         type: 'box',
         boxpoints: false
       }));
+
+      // Prepare data for request host box plot
+      const reqHosts = Object.keys(reqHostData);
+      const reqHostBoxPlotData = reqHosts.map(reqHost => ({
+        y: reqHostData[reqHost],
+        name: reqHost,
+        type: 'box',
+        boxpoints: false,
+        showlegend: true
+      }));
+
+      // Count requests per node
+      const nodeRequestCounts = {};
+      logEntries.forEach(entry => {
+        if (!nodeRequestCounts[entry.peerId]) {
+          nodeRequestCounts[entry.peerId] = 0;
+        }
+        nodeRequestCounts[entry.peerId]++;
+      });
+
+      // Convert to arrays for plotting
+      const nodeIds = Object.keys(nodeRequestCounts);
+      const requestCounts = nodeIds.map(id => nodeRequestCounts[id]);
+
+      // Count requests per host
+      const hostRequestCounts = {};
+      logEntries.forEach(entry => {
+        if (!hostRequestCounts[entry.reqHost]) {
+          hostRequestCounts[entry.reqHost] = 0;
+        }
+        hostRequestCounts[entry.reqHost]++;
+      });
+
+      // Convert to arrays for plotting
+      const hostNames = Object.keys(hostRequestCounts);
+      const hostCounts = hostNames.map(host => hostRequestCounts[host]);
 
       console.log('Rendering response...');
 
@@ -61,8 +106,20 @@ router.get('/dashboard', (req, res) => {
               <div id="lineChart"></div>
             </div>
             <div class="chart-container">
+              <h2>Request Count by Node</h2>
+              <div id="barChart"></div>
+            </div>
+            <div class="chart-container">
               <h2>Request Duration Distribution by Node</h2>
               <div id="boxChart"></div>
+            </div>
+            <div class="chart-container">
+              <h2>Request Count by Host</h2>
+              <div id="hostBarChart"></div>
+            </div>
+            <div class="chart-container">
+              <h2>Request Duration Distribution by Host</h2>
+              <div id="reqHostBoxChart"></div>
             </div>
             <script>
               try {
@@ -91,6 +148,32 @@ router.get('/dashboard', (req, res) => {
                 Plotly.newPlot('lineChart', lineData, lineLayout);
                 console.log('Line plot created');
 
+                // Bar plot
+                const barData = [{
+                  x: ${JSON.stringify(nodeIds)},
+                  y: ${JSON.stringify(requestCounts)},
+                  type: 'bar',
+                  name: 'Requests'
+                }];
+
+                const barLayout = {
+                  title: 'Number of Requests per Node',
+                  xaxis: {
+                    title: 'Node ID',
+                    tickangle: 45
+                  },
+                  yaxis: {
+                    title: 'Number of Requests'
+                  },
+                  height: 500,
+                  margin: {
+                    b: 150  // Increase bottom margin for rotated labels
+                  }
+                };
+
+                Plotly.newPlot('barChart', barData, barLayout);
+                console.log('Bar plot created');
+
                 // Box plot
                 const boxPlotData = ${JSON.stringify(boxPlotData)};
                 const boxLayout = {
@@ -110,6 +193,62 @@ router.get('/dashboard', (req, res) => {
 
                 Plotly.newPlot('boxChart', boxPlotData, boxLayout);
                 console.log('Box plot created');
+
+                // Request Host box plot
+                const reqHostBoxPlotData = ${JSON.stringify(reqHostBoxPlotData)};
+                const reqHostBoxLayout = {
+                  title: 'Request Duration Distribution by Host',
+                  yaxis: {
+                    title: 'Duration (ms)',
+                    autorange: true
+                  },
+                  xaxis: {
+                    tickangle: 45
+                  },
+                  height: 600,
+                  margin: {
+                    b: 200  // Increase bottom margin for rotated labels
+                  },
+                  showlegend: true,
+                  legend: {
+                    orientation: 'h',
+                    y: -0.4,
+                    x: 0.5,
+                    xanchor: 'center',
+                    bgcolor: '#E2E2E2',
+                    bordercolor: '#FFFFFF',
+                    borderwidth: 2
+                  }
+                };
+
+                Plotly.newPlot('reqHostBoxChart', reqHostBoxPlotData, reqHostBoxLayout);
+                console.log('Request Host box plot created');
+
+                // Host Bar plot
+                const hostBarData = [{
+                  x: ${JSON.stringify(hostNames)},
+                  y: ${JSON.stringify(hostCounts)},
+                  type: 'bar',
+                  name: 'Requests'
+                }];
+
+                const hostBarLayout = {
+                  title: 'Number of Requests per Host',
+                  xaxis: {
+                    title: 'Host',
+                    tickangle: 45
+                  },
+                  yaxis: {
+                    title: 'Number of Requests'
+                  },
+                  height: 500,
+                  margin: {
+                    b: 150  // Increase bottom margin for rotated labels
+                  }
+                };
+
+                Plotly.newPlot('hostBarChart', hostBarData, hostBarLayout);
+                console.log('Host Bar plot created');
 
               } catch (error) {
                 console.error('Error creating plots:', error);
