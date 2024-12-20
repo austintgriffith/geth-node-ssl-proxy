@@ -256,7 +256,7 @@ router.get('/dashboard', (req, res) => {
                     value: ${fallbackRequestsLastHour},
                     title: { text: "Fallback Requests in Last Hour" },
                     gauge: {
-                      axis: { range: [0, ${Math.max(requestsLastHour, 100)}] },
+                      axis: { range: [0, ${Math.max(requestsLastHour * 2, 100)}] },
                       bar: { color: "#ff0000" },
                       bgcolor: "white",
                       borderwidth: 2,
@@ -374,7 +374,10 @@ router.get('/dashboard', (req, res) => {
                   x: ${JSON.stringify(nodeIds)},
                   y: ${JSON.stringify(requestCounts)},
                   type: 'bar',
-                  name: 'Requests'
+                  name: 'Requests',
+                  marker: {
+                    color: ${JSON.stringify(nodeIds.map(id => id === fallbackUrl ? '#ff0000' : '#1f77b4'))}  // Red for fallback, Blue for others
+                  }
                 }];
 
                 const barLayout = {
