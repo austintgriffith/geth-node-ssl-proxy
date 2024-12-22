@@ -235,6 +235,30 @@ router.get('/dashboard', (req, res) => {
             <div class="chart-container">
               <div id="methodBoxChart"></div>
             </div>
+            <div class="chart-container">
+              <h2 class="divider">RPC Requests Log</h2>
+              <table id="logTable" border="1" cellpadding="5">
+                <thead>
+                  <tr>
+                    <th>UTC Timestamp</th>
+                    <th>Epoch Time</th>
+                    <th>Request Host</th>
+                    <th>Peer ID</th>
+                    <th>Method</th>
+                    <th>Params</th>
+                    <th>Duration (ms)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Log entries will be inserted here by JavaScript -->
+                </tbody>
+              </table>
+              <div id="pagination">
+                <button onclick="prevPage()">Previous</button>
+                <span id="pageInfo"></span>
+                <button onclick="nextPage()">Next</button>
+              </div>
+            </div>
             <script>
               try {
                 // Gauge charts for requests and duration in last hour
@@ -559,6 +583,48 @@ router.get('/dashboard', (req, res) => {
               } catch (error) {
                 console.error('Error creating plots:', error);
               }
+            </script>
+            <script>
+              const logEntries = ${JSON.stringify(logEntries)};
+              const entriesPerPage = 100;
+              let currentPage = 1;
+
+              function renderTable() {
+                const start = (currentPage - 1) * entriesPerPage;
+                const end = start + entriesPerPage;
+                const currentEntries = logEntries.slice(start, end);
+
+                const tbody = document.querySelector('#logTable tbody');
+                tbody.innerHTML = currentEntries.map(entry => \`
+                    <tr>
+                      <td>\${entry.utcTimestamp}</td>
+                      <td>\${entry.epochTime}</td>
+                      <td>\${entry.reqHost}</td>
+                      <td>\${entry.peerId}</td>
+                      <td>\${entry.method}</td>
+                      <td>\${entry.params}</td>
+                      <td>\${entry.duration.toFixed(3)}</td>
+                    </tr>
+                \`).join('');
+
+                document.getElementById('pageInfo').textContent = \`Page \${currentPage} of \${Math.ceil(logEntries.length / entriesPerPage)}\`;
+              }
+
+              function prevPage() {
+                if (currentPage > 1) {
+                  currentPage--;
+                  renderTable();
+                }
+              }
+
+              function nextPage() {
+                if (currentPage < Math.ceil(logEntries.length / entriesPerPage)) {
+                  currentPage++;
+                  renderTable();
+                }
+              }
+
+              renderTable();
             </script>
           </body>
         </html>
