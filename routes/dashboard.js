@@ -202,6 +202,12 @@ router.get('/dashboard', (req, res) => {
                 font-weight: bold;
                 margin: 60px 0px;
               }
+              #logTable {
+                width: 100%;
+              }
+              h2.center {
+                text-align: center;
+              }
             </style>
           </head>
           <body>
@@ -236,7 +242,7 @@ router.get('/dashboard', (req, res) => {
               <div id="methodBoxChart"></div>
             </div>
             <div class="chart-container">
-              <h2 class="divider">RPC Requests Log</h2>
+              <h2 class="center">RPC Requests Log</h2>
               <table id="logTable" border="1" cellpadding="5">
                 <thead>
                   <tr>
@@ -586,13 +592,15 @@ router.get('/dashboard', (req, res) => {
             </script>
             <script>
               const logEntries = ${JSON.stringify(logEntries)};
-              const entriesPerPage = 100;
+              const entriesPerPage = 30;
               let currentPage = 1;
 
               function renderTable() {
                 const start = (currentPage - 1) * entriesPerPage;
                 const end = start + entriesPerPage;
-                const currentEntries = logEntries.slice(start, end);
+                const currentEntries = [...logEntries]  // Create a copy to avoid mutating original
+                  .reverse()
+                  .slice(start, end);
 
                 const tbody = document.querySelector('#logTable tbody');
                 tbody.innerHTML = currentEntries.map(entry => \`
