@@ -315,7 +315,28 @@ router.get('/dashboard', (req, res) => {
                   title: 'Requests per Hour',
                   xaxis: {
                     title: 'Hour (UTC)',
-                    tickangle: 45
+                    tickangle: 45,
+                    rangeselector: {
+                      buttons: [
+                        {
+                          step: 'hour',
+                          stepmode: 'backward',
+                          count: 1,
+                          label: '1h'
+                        },
+                        {
+                          step: 'day',
+                          stepmode: 'backward',
+                          count: 1,
+                          label: '1d'
+                        },
+                        {
+                          step: 'all',
+                          label: 'All'
+                        }
+                      ]
+                    },
+                    rangeslider: {}
                   },
                   yaxis: {
                     title: 'Number of Requests'
@@ -355,7 +376,8 @@ router.get('/dashboard', (req, res) => {
                 const lineLayout = {
                   title: 'Request Durations Over Time',
                   xaxis: {
-                    title: 'Timestamp'
+                    title: 'Timestamp',
+                    rangeslider: {}
                   },
                   yaxis: {
                     title: 'Duration (ms)'
