@@ -307,9 +307,9 @@ router.get('/dashboard', (req, res) => {
                     type: "indicator",
                     mode: "gauge+number",
                     value: ${avgDurationLastHour.toFixed(2)},
-                    title: { text: "Avg Duration Last Hour (ms)" },
+                    title: { text: "Avg Request Duration Last Hour (ms)" },
                     gauge: {
-                      axis: { range: [0, ${Math.max(avgDurationLastHour * 2, 100)}] },
+                      axis: { range: [0, 400] },
                       bar: { color: "#2ca02c" },
                       bgcolor: "white",
                       borderwidth: 2,
@@ -355,10 +355,16 @@ router.get('/dashboard', (req, res) => {
                     rangeselector: {
                       buttons: [
                         {
-                          step: 'hour',
+                          step: 'month',
                           stepmode: 'backward',
                           count: 1,
-                          label: '1h'
+                          label: '1m'
+                        },
+                        {
+                          step: 'week',
+                          stepmode: 'backward',
+                          count: 1,
+                          label: '1w'
                         },
                         {
                           step: 'day',
@@ -413,6 +419,32 @@ router.get('/dashboard', (req, res) => {
                   title: 'Request Durations Over Time',
                   xaxis: {
                     title: 'Timestamp',
+                    rangeselector: {
+                      buttons: [
+                        {
+                          step: 'month',
+                          stepmode: 'backward',
+                          count: 1,
+                          label: '1m'
+                        },
+                        {
+                          step: 'week',
+                          stepmode: 'backward',
+                          count: 1,
+                          label: '1w'
+                        },
+                        {
+                          step: 'day',
+                          stepmode: 'backward',
+                          count: 1,
+                          label: '1d'
+                        },
+                        {
+                          step: 'all',
+                          label: 'All'
+                        }
+                      ]
+                    },
                     rangeslider: {}
                   },
                   yaxis: {
@@ -598,7 +630,7 @@ router.get('/dashboard', (req, res) => {
             </script>
             <script>
               const logEntries = ${JSON.stringify(logEntries)};
-              const entriesPerPage = 100;
+              const entriesPerPage = 30;
               let currentPage = 1;
               let filteredEntries = [...logEntries];
 
