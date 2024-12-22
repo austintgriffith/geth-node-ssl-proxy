@@ -154,7 +154,9 @@ router.get('/dashboard', (req, res) => {
       const fallbackRequestsByHour = {};
       
       logEntries.forEach(entry => {
-        const hour = new Date(entry.utcTimestamp).toISOString().slice(0, 13) + ':00:00';
+        const entryDate = new Date(entry.utcTimestamp);
+        // Format the hour consistently
+        const hour = entryDate.toISOString().slice(0, 13) + ':00:00';
         
         // Initialize if not exists
         if (!requestsByHour[hour]) {
@@ -172,6 +174,7 @@ router.get('/dashboard', (req, res) => {
 
       // Convert to arrays for plotting
       const timePoints = Object.keys(requestsByHour).sort();
+      
       const nodeRequestsPerHour = timePoints.map(hour => requestsByHour[hour]);
       const fallbackRequestsPerHour = timePoints.map(hour => fallbackRequestsByHour[hour]);
 
