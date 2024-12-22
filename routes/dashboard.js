@@ -242,7 +242,13 @@ router.get('/dashboard', (req, res) => {
               <div id="methodBoxChart"></div>
             </div>
             <div class="chart-container">
-              <h2 class="center">RPC Requests Log</h2>
+              <h2 class="divider">RPC Requests Log</h2>
+              <input 
+                type="text" 
+                id="searchBox" 
+                placeholder="Search logs..." 
+                style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box;"
+              >
               <table id="logTable" border="1" cellpadding="5">
                 <thead>
                   <tr>
@@ -592,13 +598,27 @@ router.get('/dashboard', (req, res) => {
             </script>
             <script>
               const logEntries = ${JSON.stringify(logEntries)};
-              const entriesPerPage = 30;
+              const entriesPerPage = 100;
               let currentPage = 1;
+              let filteredEntries = [...logEntries];
+
+              document.getElementById('searchBox').addEventListener('input', function(e) {
+                const searchTerm = e.target.value.toLowerCase();
+                filteredEntries = logEntries.filter(entry => 
+                  entry.utcTimestamp.toLowerCase().includes(searchTerm) ||
+                  entry.reqHost.toLowerCase().includes(searchTerm) ||
+                  entry.peerId.toLowerCase().includes(searchTerm) ||
+                  entry.method.toLowerCase().includes(searchTerm) ||
+                  entry.params.toLowerCase().includes(searchTerm)
+                );
+                currentPage = 1;
+                renderTable();
+              });
 
               function renderTable() {
                 const start = (currentPage - 1) * entriesPerPage;
                 const end = start + entriesPerPage;
-                const currentEntries = [...logEntries]  // Create a copy to avoid mutating original
+                const currentEntries = [...filteredEntries]
                   .reverse()
                   .slice(start, end);
 
@@ -615,7 +635,7 @@ router.get('/dashboard', (req, res) => {
                     </tr>
                 \`).join('');
 
-                document.getElementById('pageInfo').textContent = \`Page \${currentPage} of \${Math.ceil(logEntries.length / entriesPerPage)}\`;
+                document.getElementById('pageInfo').textContent = \`Page \${currentPage} of \${Math.ceil(filteredEntries.length / entriesPerPage)}\`;
               }
 
               function prevPage() {
@@ -626,7 +646,7 @@ router.get('/dashboard', (req, res) => {
               }
 
               function nextPage() {
-                if (currentPage < Math.ceil(logEntries.length / entriesPerPage)) {
+                if (currentPage < Math.ceil(filteredEntries.length / entriesPerPage)) {
                   currentPage++;
                   renderTable();
                 }
