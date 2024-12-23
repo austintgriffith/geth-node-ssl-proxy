@@ -740,6 +740,27 @@ router.get('/dashboard', (req, res) => {
                 \`).join('');
 
                 document.getElementById('pageInfo').textContent = \`Page \${currentPage} of \${Math.ceil(filteredEntries.length / entriesPerPage)}\`;
+                
+                // Update button states
+                const prevButton = document.querySelector('button[onclick="prevPage()"]');
+                const nextButton = document.querySelector('button[onclick="nextPage()"]');
+                if (prevButton) prevButton.disabled = currentPage === 1;
+                if (nextButton) nextButton.disabled = currentPage >= Math.ceil(filteredEntries.length / entriesPerPage);
+              }
+
+              function prevPage() {
+                if (currentPage > 1) {
+                  currentPage--;
+                  renderTable();
+                }
+              }
+
+              function nextPage() {
+                const maxPage = Math.ceil(filteredEntries.length / entriesPerPage);
+                if (currentPage < maxPage) {
+                  currentPage++;
+                  renderTable();
+                }
               }
 
               document.getElementById('searchBox').addEventListener('input', function(e) {
@@ -749,6 +770,10 @@ router.get('/dashboard', (req, res) => {
 
               // Initial render
               renderTable();
+
+              // Make sure these functions are available in the global scope
+              window.prevPage = prevPage;
+              window.nextPage = nextPage;
             </script>
           </body>
         </html>
