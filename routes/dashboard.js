@@ -15,8 +15,17 @@ router.get('/dashboard', (req, res) => {
     try {
       console.log('Processing log entries...');
       const logEntries = data.trim().split('\n').map(line => {
-        const [utcTimestamp, epochTime, reqHost, peerId, method, params, duration] = line.split('|');
-        return { utcTimestamp, epochTime, reqHost, peerId, method, params, duration: parseFloat(duration) };
+        const [utcTimestamp, epochTime, reqHost, peerId, method, params, duration, messageId] = line.split('|');
+        return { 
+          utcTimestamp, 
+          epochTime, 
+          reqHost, 
+          peerId, 
+          method, 
+          params, 
+          duration: parseFloat(duration),
+          messageId 
+        };
       });
 
       console.log(`Found ${logEntries.length} log entries`);
@@ -253,12 +262,12 @@ router.get('/dashboard', (req, res) => {
                 <thead>
                   <tr>
                     <th>UTC Timestamp</th>
-                    <th>Epoch Time</th>
                     <th>Request Host</th>
                     <th>Peer ID</th>
                     <th>Method</th>
                     <th>Params</th>
                     <th>Duration (ms)</th>
+                    <th>Message ID</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -641,7 +650,8 @@ router.get('/dashboard', (req, res) => {
                   entry.reqHost.toLowerCase().includes(searchTerm) ||
                   entry.peerId.toLowerCase().includes(searchTerm) ||
                   entry.method.toLowerCase().includes(searchTerm) ||
-                  entry.params.toLowerCase().includes(searchTerm)
+                  entry.params.toLowerCase().includes(searchTerm) ||
+                  entry.messageId.toLowerCase().includes(searchTerm)
                 );
                 currentPage = 1;
                 renderTable();
@@ -658,12 +668,12 @@ router.get('/dashboard', (req, res) => {
                 tbody.innerHTML = currentEntries.map(entry => \`
                     <tr>
                       <td>\${entry.utcTimestamp}</td>
-                      <td>\${entry.epochTime}</td>
                       <td>\${entry.reqHost}</td>
                       <td>\${entry.peerId}</td>
                       <td>\${entry.method}</td>
                       <td>\${entry.params}</td>
                       <td>\${entry.duration.toFixed(3)}</td>
+                      <td>\${entry.messageId}</td>
                     </tr>
                 \`).join('');
 

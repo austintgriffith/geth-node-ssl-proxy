@@ -37,7 +37,7 @@ function logRpcRequest(req, messageId, requestStartTimes) {
     }).join(',');
   }
   
-  logEntry += `|${duration.toFixed(3)}\n`;
+  logEntry += `|${duration.toFixed(3)}|${messageId}\n`;
   
   fs.appendFile('rpcRequests.log', logEntry, (err) => {
     if (err) {
