@@ -145,6 +145,12 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
       } catch (error) {
         console.error("Error sending RPC request:", error);
+        const clientIp = req.ip || req.connection.remoteAddress;
+        const messageId = generateMessageId(req.body, clientIp);
+        
+        // Log the failed request
+        logRpcRequest(req, messageId, requestStartTimes, false);
+        
         res.status(500).json({
           jsonrpc: "2.0",
           id: req.body.id,
@@ -157,6 +163,12 @@ app.post("/", validateRpcRequest, async (req, res) => {
       }
     } else {
       console.log("Selected client is invalid or has no WebSocket connection");
+      const clientIp = req.ip || req.connection.remoteAddress;
+      const messageId = generateMessageId(req.body, clientIp);
+      
+      // Log the failed request
+      logRpcRequest(req, messageId, requestStartTimes, false);
+      
       res.status(500).json({
         jsonrpc: "2.0",
         id: req.body.id,
@@ -170,6 +182,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
   } else {
     console.log("NO CLIENTS CONNECTED, using fallback mechanism");
     try {
+      foo = 5;
       const clientIp = req.ip || req.connection.remoteAddress;
       const messageId = generateMessageId(req.body, clientIp);
       
@@ -180,10 +193,17 @@ app.post("/", validateRpcRequest, async (req, res) => {
       
       // Log the RPC request with timing information
       req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
-      logRpcRequest(req, messageId, requestStartTimes, True);
+      logRpcRequest(req, messageId, requestStartTimes, true);
       
       res.json(result);
     } catch (error) {
+      const clientIp = req.ip || req.connection.remoteAddress;
+      const messageId = generateMessageId(req.body, clientIp);
+      
+      // Log the failed fallback request
+      req.handlingClient = null;
+      logRpcRequest(req, messageId, requestStartTimes, false);
+      
       res.status(500).json({
         jsonrpc: "2.0",
         id: req.body.id,
