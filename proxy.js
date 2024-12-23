@@ -182,7 +182,6 @@ app.post("/", validateRpcRequest, async (req, res) => {
   } else {
     console.log("NO CLIENTS CONNECTED, using fallback mechanism");
     try {
-      foo = 5;
       const clientIp = req.ip || req.connection.remoteAddress;
       const messageId = generateMessageId(req.body, clientIp);
       

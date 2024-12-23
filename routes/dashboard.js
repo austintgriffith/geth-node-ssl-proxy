@@ -151,12 +151,19 @@ router.get('/dashboard', (req, res) => {
         const entryTime = new Date(entry.utcTimestamp);
         return entryTime >= oneHourAgo;
       });
+
       const requestsLastHour = lastHourEntries.length;
-      const avgDurationLastHour = lastHourEntries.length > 0 
-        ? lastHourEntries.reduce((sum, entry) => sum + entry.duration, 0) / lastHourEntries.length
+      const validDurationEntries = lastHourEntries.filter(entry => typeof entry.duration === 'number' && !isNaN(entry.duration));
+      const avgDurationLastHour = validDurationEntries.length > 0 
+        ? validDurationEntries.reduce((sum, entry) => sum + entry.duration, 0) / validDurationEntries.length
         : 0;
+
       const fallbackRequestsLastHour = lastHourEntries.filter(entry => 
         entry.peerId === fallbackUrl
+      ).length;
+
+      const failedRequestsLastHour = lastHourEntries.filter(entry => 
+        entry.success === false
       ).length;
 
       // Group requests by hour, separating fallback and node requests
@@ -324,12 +331,26 @@ router.get('/dashboard', (req, res) => {
                     title: { text: "Fallback Requests in Last Hour" },
                     gauge: {
                       axis: { range: [0, ${Math.max(requestsLastHour * 2, 100)}] },
-                      bar: { color: "#ff0000" },
+                      bar: { color: "#FFC0CB" },
                       bgcolor: "white",
                       borderwidth: 2,
                       bordercolor: "gray",
                     },
                     domain: { row: 0, column: 1 }
+                  },
+                  {
+                    type: "indicator",
+                    mode: "gauge+number",
+                    value: ${failedRequestsLastHour},
+                    title: { text: "Failed Requests in Last Hour" },
+                    gauge: {
+                      axis: { range: [0, ${Math.max(requestsLastHour * 2, 100)}] },
+                      bar: { color: "#FF0000" },
+                      bgcolor: "white",
+                      borderwidth: 2,
+                      bordercolor: "gray",
+                    },
+                    domain: { row: 0, column: 2 }
                   },
                   {
                     type: "indicator",
@@ -343,12 +364,12 @@ router.get('/dashboard', (req, res) => {
                       borderwidth: 2,
                       bordercolor: "gray",
                     },
-                    domain: { row: 0, column: 2 }
+                    domain: { row: 0, column: 3 }
                   }
                 ];
 
                 const gaugeLayout = {
-                  grid: { rows: 1, columns: 3, pattern: 'independent' },
+                  grid: { rows: 1, columns: 4, pattern: 'independent' },
                   height: 300,
                   margin: { t: 50, r: 25, l: 25, b: 25 }
                 };
@@ -371,7 +392,7 @@ router.get('/dashboard', (req, res) => {
                     type: 'scatter',
                     mode: 'lines',
                     name: 'Fallback Requests',
-                    line: { color: '#ff0000' }  // Red
+                    line: { color: '#FFC0CB' }  // pink
                   }
                 ];
 
@@ -439,7 +460,7 @@ router.get('/dashboard', (req, res) => {
                     type: 'scatter',
                     mode: 'lines',
                     name: 'Fallback Request Duration',
-                    line: { color: '#ff0000' }  // Red
+                    line: { color: '#FFC0CB' }  // pink
                   }
                 ];
 
@@ -497,7 +518,7 @@ router.get('/dashboard', (req, res) => {
                   type: 'bar',
                   name: 'Requests',
                   marker: {
-                    color: ${JSON.stringify(nodeIds.map(id => id === fallbackUrl ? '#ff0000' : '#1f77b4'))}  // Red for fallback, Blue for others
+                    color: ${JSON.stringify(nodeIds.map(id => id === fallbackUrl ? '#FFC0CB' : '#1f77b4'))}  // Pink for fallback, Blue for others
                   }
                 }];
 
@@ -657,13 +678,15 @@ router.get('/dashboard', (req, res) => {
               }
             </script>
             <script>
+              // Initialize variables
               const logEntries = ${JSON.stringify(logEntries)};
-              const entriesPerPage = 30;
-              let currentPage = 1;
               let filteredEntries = [...logEntries];
               let successFilter = null;  // null means show all
+              const entriesPerPage = 30;
+              let currentPage = 1;
 
               function filterBySuccess(success) {
+                console.log('Filter value:', success);
                 successFilter = success;
                 currentPage = 1;
                 
@@ -688,17 +711,13 @@ router.get('/dashboard', (req, res) => {
                     entry.messageId.toLowerCase().includes(searchTerm);
                     
                   const matchesSuccess = successFilter === null || entry.success === successFilter;
+                  console.log('Entry success:', entry.success, 'Filter:', successFilter, 'Matches:', matchesSuccess);
                   
                   return matchesSearch && matchesSuccess;
                 });
                 
                 renderTable();
               }
-
-              document.getElementById('searchBox').addEventListener('input', function(e) {
-                currentPage = 1;
-                applyFilters();
-              });
 
               function renderTable() {
                 const start = (currentPage - 1) * entriesPerPage;
@@ -709,34 +728,26 @@ router.get('/dashboard', (req, res) => {
 
                 const tbody = document.querySelector('#logTable tbody');
                 tbody.innerHTML = currentEntries.map(entry => \`
-                    <tr>
-                      <td>\${entry.utcTimestamp}</td>
-                      <td>\${entry.reqHost}</td>
-                      <td>\${entry.peerId}</td>
-                      <td>\${entry.method}</td>
-                      <td>\${entry.params}</td>
-                      <td>\${entry.duration.toFixed(3)}</td>
-                      <td>\${entry.messageId}</td>
+                    <tr style="background-color: \${entry.success ? 'transparent' : '#ffe6e6'}">
+                      <td>\${entry.utcTimestamp || ''}</td>
+                      <td>\${entry.reqHost || ''}</td>
+                      <td>\${entry.peerId || ''}</td>
+                      <td>\${entry.method || ''}</td>
+                      <td>\${entry.params || ''}</td>
+                      <td>\${typeof entry.duration === 'number' ? entry.duration.toFixed(3) : ''}</td>
+                      <td>\${entry.messageId || ''}</td>
                     </tr>
                 \`).join('');
 
                 document.getElementById('pageInfo').textContent = \`Page \${currentPage} of \${Math.ceil(filteredEntries.length / entriesPerPage)}\`;
               }
 
-              function prevPage() {
-                if (currentPage > 1) {
-                  currentPage--;
-                  renderTable();
-                }
-              }
+              document.getElementById('searchBox').addEventListener('input', function(e) {
+                currentPage = 1;
+                applyFilters();
+              });
 
-              function nextPage() {
-                if (currentPage < Math.ceil(filteredEntries.length / entriesPerPage)) {
-                  currentPage++;
-                  renderTable();
-                }
-              }
-
+              // Initial render
               renderTable();
             </script>
           </body>
