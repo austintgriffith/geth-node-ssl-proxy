@@ -180,7 +180,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
       
       // Log the RPC request with timing information
       req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
-      logRpcRequest(req, messageId, requestStartTimes);
+      logRpcRequest(req, messageId, requestStartTimes, True);
       
       res.json(result);
     } catch (error) {
@@ -472,7 +472,7 @@ wss.on('connection', (ws) => {
             .find(c => c.clientID === client.clientID);
           openMessage.req.handlingClient = handlingClient;
           // Log the RPC request with timing information
-          logRpcRequest(openMessage.req, messageId, requestStartTimes);
+          logRpcRequest(openMessage.req, messageId, requestStartTimes, true);
 
           // Increment n_rpc_requests for the client that served the request
           await incrementRpcRequests(client.clientID);

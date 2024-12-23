@@ -2,7 +2,7 @@ const fs = require('fs');
 const { performance } = require('perf_hooks');
 const { fallbackUrl } = require('../config');
 
-function logRpcRequest(req, messageId, requestStartTimes) {
+function logRpcRequest(req, messageId, requestStartTimes, success) {
   const { method, params } = req.body;
   const startTime = requestStartTimes.get(messageId);
   const endTime = performance.now();
@@ -37,7 +37,7 @@ function logRpcRequest(req, messageId, requestStartTimes) {
     }).join(',');
   }
   
-  logEntry += `|${duration.toFixed(3)}|${messageId}\n`;
+  logEntry += `|${duration.toFixed(3)}|${messageId}|${success}\n`;
   
   fs.appendFile('rpcRequests.log', logEntry, (err) => {
     if (err) {

@@ -15,7 +15,7 @@ router.get('/dashboard', (req, res) => {
     try {
       console.log('Processing log entries...');
       const logEntries = data.trim().split('\n').map(line => {
-        const [utcTimestamp, epochTime, reqHost, peerId, method, params, duration, messageId] = line.split('|');
+        const [utcTimestamp, epochTime, reqHost, peerId, method, params, duration, messageId, success] = line.split('|');
         return { 
           utcTimestamp, 
           epochTime, 
@@ -24,7 +24,8 @@ router.get('/dashboard', (req, res) => {
           method, 
           params, 
           duration: parseFloat(duration),
-          messageId 
+          messageId,
+          success: success === 'true'  // Convert string to boolean
         };
       });
 
@@ -217,6 +218,19 @@ router.get('/dashboard', (req, res) => {
               h2.center {
                 text-align: center;
               }
+              .filter-btn {
+                padding: 8px 16px;
+                margin-right: 10px;
+                cursor: pointer;
+                border: 1px solid #ccc;
+                background-color: white;
+                border-radius: 4px;
+              }
+              .filter-btn.active {
+                background-color: #007bff;
+                color: white;
+                border-color: #0056b3;
+              }
             </style>
           </head>
           <body>
@@ -252,6 +266,11 @@ router.get('/dashboard', (req, res) => {
             </div>
             <div class="chart-container">
               <h2 class="divider">RPC Requests Log</h2>
+              <div style="margin-bottom: 10px;">
+                <button onclick="filterBySuccess(null)" class="filter-btn active">All</button>
+                <button onclick="filterBySuccess(true)" class="filter-btn">Successful</button>
+                <button onclick="filterBySuccess(false)" class="filter-btn">Failed</button>
+              </div>
               <input 
                 type="text" 
                 id="searchBox" 
@@ -642,19 +661,43 @@ router.get('/dashboard', (req, res) => {
               const entriesPerPage = 30;
               let currentPage = 1;
               let filteredEntries = [...logEntries];
+              let successFilter = null;  // null means show all
+
+              function filterBySuccess(success) {
+                successFilter = success;
+                currentPage = 1;
+                
+                // Update button styles
+                document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelector(\`button[onclick="filterBySuccess(\${success === null ? 'null' : success})"]\`).classList.add('active');
+                
+                // Apply both search and success filters
+                applyFilters();
+              }
+
+              function applyFilters() {
+                const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+                
+                filteredEntries = logEntries.filter(entry => {
+                  const matchesSearch = 
+                    entry.utcTimestamp.toLowerCase().includes(searchTerm) ||
+                    entry.reqHost.toLowerCase().includes(searchTerm) ||
+                    entry.peerId.toLowerCase().includes(searchTerm) ||
+                    entry.method.toLowerCase().includes(searchTerm) ||
+                    entry.params.toLowerCase().includes(searchTerm) ||
+                    entry.messageId.toLowerCase().includes(searchTerm);
+                    
+                  const matchesSuccess = successFilter === null || entry.success === successFilter;
+                  
+                  return matchesSearch && matchesSuccess;
+                });
+                
+                renderTable();
+              }
 
               document.getElementById('searchBox').addEventListener('input', function(e) {
-                const searchTerm = e.target.value.toLowerCase();
-                filteredEntries = logEntries.filter(entry => 
-                  entry.utcTimestamp.toLowerCase().includes(searchTerm) ||
-                  entry.reqHost.toLowerCase().includes(searchTerm) ||
-                  entry.peerId.toLowerCase().includes(searchTerm) ||
-                  entry.method.toLowerCase().includes(searchTerm) ||
-                  entry.params.toLowerCase().includes(searchTerm) ||
-                  entry.messageId.toLowerCase().includes(searchTerm)
-                );
                 currentPage = 1;
-                renderTable();
+                applyFilters();
               });
 
               function renderTable() {
