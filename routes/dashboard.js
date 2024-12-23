@@ -59,7 +59,13 @@ router.get('/dashboard', (req, res) => {
         y: peerData[peerId],
         name: peerId,
         type: 'box',
-        boxpoints: false
+        boxpoints: false,
+        marker: {
+          color: peerId === fallbackUrl ? '#FFC0CB' : undefined  // Pink for fallback, default for others
+        },
+        line: {
+          color: peerId === fallbackUrl ? '#FFC0CB' : undefined  // Pink for fallback, default for others
+        }
       }));
 
       // Prepare data for request host box plot
@@ -169,16 +175,17 @@ router.get('/dashboard', (req, res) => {
       // Group requests by hour, separating fallback and node requests
       const requestsByHour = {};
       const fallbackRequestsByHour = {};
+      const failedRequestsByHour = {};
       
       logEntries.forEach(entry => {
         const entryDate = new Date(entry.utcTimestamp);
-        // Format the hour consistently
         const hour = entryDate.toISOString().slice(0, 13) + ':00:00';
         
         // Initialize if not exists
         if (!requestsByHour[hour]) {
           requestsByHour[hour] = 0;
           fallbackRequestsByHour[hour] = 0;
+          failedRequestsByHour[hour] = 0;
         }
         
         // Count fallback vs node requests separately
@@ -187,6 +194,11 @@ router.get('/dashboard', (req, res) => {
         } else {
           requestsByHour[hour]++;
         }
+        
+        // Count failed requests
+        if (!entry.success) {
+          failedRequestsByHour[hour]++;
+        }
       });
 
       // Convert to arrays for plotting
@@ -194,6 +206,7 @@ router.get('/dashboard', (req, res) => {
       
       const nodeRequestsPerHour = timePoints.map(hour => requestsByHour[hour]);
       const fallbackRequestsPerHour = timePoints.map(hour => fallbackRequestsByHour[hour]);
+      const failedRequestsPerHour = timePoints.map(hour => failedRequestsByHour[hour]);
 
       // Prepare data for line plot
       const nodeDurations = logEntries
@@ -393,6 +406,14 @@ router.get('/dashboard', (req, res) => {
                     mode: 'lines',
                     name: 'Fallback Requests',
                     line: { color: '#FFC0CB' }  // pink
+                  },
+                  {
+                    x: ${JSON.stringify(timePoints)},
+                    y: ${JSON.stringify(failedRequestsPerHour)},
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Failed Requests',
+                    line: { color: '#FF0000' }  // red
                   }
                 ];
 
