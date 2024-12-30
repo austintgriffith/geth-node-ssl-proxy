@@ -1,4 +1,4 @@
-const { getDbPool } = require('./dbUtils');
+const { getDbPool } = require('../utils/dbUtils');
 
 async function incrementOwnerPoints(owner) {
   try {
