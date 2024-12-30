@@ -53,30 +53,85 @@ router.get('/dashboard', (req, res) => {
       const timestamps = logEntries.map(entry => entry.utcTimestamp);
       const durations = logEntries.map(entry => entry.duration);
 
+      function calculatePercentiles(data, lowerPercentile, upperPercentile) {
+        const sortedData = data.slice().sort((a, b) => a - b);
+        const lowerIndex = Math.floor(lowerPercentile * sortedData.length);
+        const upperIndex = Math.ceil(upperPercentile * sortedData.length) - 1;
+        return {
+          lower: sortedData[lowerIndex],
+          upper: sortedData[upperIndex]
+        };
+      }
+
       // Prepare data for box plot
       const peerIds = Object.keys(peerData);
-      const boxPlotData = peerIds.map(peerId => ({
-        y: peerData[peerId],
-        name: peerId,
-        type: 'box',
-        boxpoints: false,
-        marker: {
-          color: peerId === fallbackUrl ? '#FFC0CB' : undefined  // Pink for fallback, default for others
-        },
-        line: {
-          color: peerId === fallbackUrl ? '#FFC0CB' : undefined  // Pink for fallback, default for others
-        }
-      }));
+      const boxPlotData = peerIds.map(peerId => {
+        const { lower, upper } = calculatePercentiles(peerData[peerId], 0.05, 0.95);
+        return {
+          y: peerData[peerId],
+          name: peerId,
+          type: 'box',
+          boxpoints: 'outliers',
+          lowerfence: [lower],
+          upperfence: [upper],
+          marker: {
+            color: peerId === fallbackUrl ? '#FFC0CB' : undefined
+          },
+          line: {
+            color: peerId === fallbackUrl ? '#FFC0CB' : undefined
+          }
+        };
+      });
 
       // Prepare data for request host box plot
       const reqHosts = Object.keys(reqHostData);
-      const reqHostBoxPlotData = reqHosts.map(reqHost => ({
-        y: reqHostData[reqHost],
-        name: reqHost,
-        type: 'box',
-        boxpoints: false,
-        showlegend: true
-      }));
+      const reqHostBoxPlotData = reqHosts.map(reqHost => {
+        const { lower, upper } = calculatePercentiles(reqHostData[reqHost], 0.05, 0.95);
+        return {
+          y: reqHostData[reqHost],
+          name: reqHost,
+          type: 'box',
+          boxpoints: 'outliers',
+          lowerfence: [lower],
+          upperfence: [upper],
+          showlegend: true
+        };
+      });
+
+      // Count requests per method
+      const methodRequestCounts = {};
+      logEntries.forEach(entry => {
+        if (!methodRequestCounts[entry.method]) {
+          methodRequestCounts[entry.method] = 0;
+        }
+        methodRequestCounts[entry.method]++;
+      });
+
+      // Convert to arrays for plotting
+      const methodNames = Object.keys(methodRequestCounts);
+      const methodCounts = methodNames.map(method => methodRequestCounts[method]);
+
+      // Prepare data for method box plot
+      const methodData = {};
+      logEntries.forEach(entry => {
+        if (!methodData[entry.method]) {
+          methodData[entry.method] = [];
+        }
+        methodData[entry.method].push(entry.duration);
+      });
+
+      const methodBoxPlotData = methodNames.map(method => {
+        const { lower, upper } = calculatePercentiles(methodData[method], 0.05, 0.95);
+        return {
+          y: methodData[method],
+          name: method,
+          type: 'box',
+          boxpoints: 'outliers',
+          lowerfence: [lower],
+          upperfence: [upper],
+          showlegend: true
+        };
+      });
 
       // Count requests per node
       const nodeRequestCounts = {};
@@ -118,37 +173,6 @@ router.get('/dashboard', (req, res) => {
       // Convert to arrays for plotting, sorted by hour
       const hours = Object.keys(hourlyData).sort();
       const requestsPerHour = hours.map(hour => hourlyData[hour]);
-
-      // Count requests per method
-      const methodRequestCounts = {};
-      logEntries.forEach(entry => {
-        if (!methodRequestCounts[entry.method]) {
-          methodRequestCounts[entry.method] = 0;
-        }
-        methodRequestCounts[entry.method]++;
-      });
-
-      // Convert to arrays for plotting
-      const methodNames = Object.keys(methodRequestCounts);
-      const methodCounts = methodNames.map(method => methodRequestCounts[method]);
-
-      // Group data by method for box plot
-      const methodData = {};
-      logEntries.forEach(entry => {
-        if (!methodData[entry.method]) {
-          methodData[entry.method] = [];
-        }
-        methodData[entry.method].push(entry.duration);
-      });
-
-      // Prepare data for method box plot
-      const methodBoxPlotData = methodNames.map(method => ({
-        y: methodData[method],
-        name: method,
-        type: 'box',
-        boxpoints: false,
-        showlegend: true
-      }));
 
       // Calculate requests and average duration for the last hour
       const now = new Date();
@@ -576,14 +600,19 @@ router.get('/dashboard', (req, res) => {
                   title: 'Request Duration Distribution by Node',
                   yaxis: {
                     title: 'Duration (ms)',
-                    autorange: true
+                    // Calculate range from all data points' 5th and 95th percentiles
+                    range: [
+                      Math.min(...boxPlotData.map(d => d.lowerfence[0])) * 0.95,  // Add small buffer
+                      Math.max(...boxPlotData.map(d => d.upperfence[0])) * 1.05   // Add small buffer
+                    ],
+                    autorange: false  // Force our custom range
                   },
                   xaxis: {
                     tickangle: 45
                   },
                   height: 800,
                   margin: {
-                    b: 150  // Increase bottom margin for rotated labels
+                    b: 150
                   },
                   showlegend: false,
                 };
@@ -596,14 +625,18 @@ router.get('/dashboard', (req, res) => {
                   title: 'Request Duration Distribution by Host',
                   yaxis: {
                     title: 'Duration (ms)',
-                    autorange: true
+                    range: [
+                      Math.min(...reqHostBoxPlotData.map(d => d.lowerfence[0])) * 0.95,
+                      Math.max(...reqHostBoxPlotData.map(d => d.upperfence[0])) * 1.05
+                    ],
+                    autorange: false
                   },
                   xaxis: {
                     tickangle: 45
                   },
                   height: 800,
                   margin: {
-                    b: 200  // Increase bottom margin for rotated labels
+                    b: 200
                   },
                   showlegend: false
                 };
@@ -666,14 +699,18 @@ router.get('/dashboard', (req, res) => {
                   title: 'Request Duration Distribution by Method',
                   yaxis: {
                     title: 'Duration (ms)',
-                    autorange: true
+                    range: [
+                      Math.min(...methodBoxPlotData.map(d => d.lowerfence[0])) * 0.95,
+                      Math.max(...methodBoxPlotData.map(d => d.upperfence[0])) * 1.05
+                    ],
+                    autorange: false
                   },
                   xaxis: {
                     tickangle: 45
                   },
                   height: 800,
                   margin: {
-                    b: 200  // Increase bottom margin for rotated labels
+                    b: 200
                   },
                   showlegend: false,
                 };
