@@ -425,22 +425,22 @@ router.get('/dashboard', (req, res) => {
                     rangeselector: {
                       buttons: [
                         {
-                          step: 'month',
-                          stepmode: 'backward',
                           count: 1,
-                          label: '1m'
-                        },
-                        {
-                          step: 'week',
-                          stepmode: 'backward',
-                          count: 1,
-                          label: '1w'
-                        },
-                        {
+                          label: '1d',
                           step: 'day',
-                          stepmode: 'backward',
+                          stepmode: 'backward'
+                        },
+                        {
+                          count: 7,
+                          label: '1w',
+                          step: 'day',
+                          stepmode: 'backward'
+                        },
+                        {
                           count: 1,
-                          label: '1d'
+                          label: '1m',
+                          step: 'month',
+                          stepmode: 'backward'
                         },
                         {
                           step: 'all',
@@ -448,7 +448,7 @@ router.get('/dashboard', (req, res) => {
                         }
                       ]
                     },
-                    rangeslider: {}
+                    rangeslider: { visible: true }
                   },
                   yaxis: {
                     title: 'Number of Requests'
@@ -492,22 +492,22 @@ router.get('/dashboard', (req, res) => {
                     rangeselector: {
                       buttons: [
                         {
-                          step: 'month',
-                          stepmode: 'backward',
                           count: 1,
-                          label: '1m'
-                        },
-                        {
-                          step: 'week',
-                          stepmode: 'backward',
-                          count: 1,
-                          label: '1w'
-                        },
-                        {
+                          label: '1d',
                           step: 'day',
-                          stepmode: 'backward',
+                          stepmode: 'backward'
+                        },
+                        {
+                          count: 7,
+                          label: '1w',
+                          step: 'day',
+                          stepmode: 'backward'
+                        },
+                        {
                           count: 1,
-                          label: '1d'
+                          label: '1m',
+                          step: 'month',
+                          stepmode: 'backward'
                         },
                         {
                           step: 'all',
@@ -573,15 +573,9 @@ router.get('/dashboard', (req, res) => {
                   },
                   height: 800,
                   margin: {
-                    b: 200  // Increase bottom margin for rotated labels
+                    b: 150  // Increase bottom margin for rotated labels
                   },
-                  showlegend: true,
-                  legend: {
-                    orientation: 'h',     // horizontal legend
-                    y: -0.5,             // position below the plot
-                    x: 0.5,              // center horizontally
-                    xanchor: 'center'    // anchor point for centering
-                  }
+                  showlegend: false,
                 };
 
                 Plotly.newPlot('boxChart', boxPlotData, boxLayout);
@@ -601,16 +595,7 @@ router.get('/dashboard', (req, res) => {
                   margin: {
                     b: 200  // Increase bottom margin for rotated labels
                   },
-                  showlegend: true,
-                  legend: {
-                    orientation: 'h',
-                    y: -0.4,
-                    x: 0.5,
-                    xanchor: 'center',
-                    bgcolor: '#E2E2E2',
-                    bordercolor: '#FFFFFF',
-                    borderwidth: 2
-                  }
+                  showlegend: false
                 };
 
                 Plotly.newPlot('reqHostBoxChart', reqHostBoxPlotData, reqHostBoxLayout);
@@ -680,16 +665,7 @@ router.get('/dashboard', (req, res) => {
                   margin: {
                     b: 200  // Increase bottom margin for rotated labels
                   },
-                  showlegend: true,
-                  legend: {
-                    orientation: 'h',
-                    y: -0.4,
-                    x: 0.5,
-                    xanchor: 'center',
-                    bgcolor: '#E2E2E2',
-                    bordercolor: '#FFFFFF',
-                    borderwidth: 2
-                  }
+                  showlegend: false,
                 };
 
                 Plotly.newPlot('methodBoxChart', methodBoxPlotData, methodBoxLayout);
