@@ -448,15 +448,20 @@ router.get('/dashboard', (req, res) => {
                         }
                       ]
                     },
-                    rangeslider: { visible: true }
+                    rangeslider: { visible: true },
+                    autorange: true,
+                    rangemode: 'normal'
                   },
                   yaxis: {
-                    title: 'Number of Requests'
+                    title: 'Number of Requests',
+                    autorange: true,
+                    rangemode: 'normal',
+                    fixedrange: false
                   },
                   height: 800,
                   showlegend: true,
                   legend: {
-                    y: -0.1,  // Move legend below chart
+                    y: -0.1,
                     x: 0.5,
                     xanchor: 'center',
                     orientation: 'h'
@@ -515,15 +520,20 @@ router.get('/dashboard', (req, res) => {
                         }
                       ]
                     },
-                    rangeslider: {}
+                    rangeslider: {},
+                    autorange: true,
+                    rangemode: 'normal'
                   },
                   yaxis: {
-                    title: 'Duration (ms)'
+                    title: 'Duration (ms)',
+                    autorange: true,
+                    rangemode: 'normal',
+                    fixedrange: false
                   },
                   height: 800,
                   showlegend: true,
                   legend: {
-                    y: -0.1,  // Move legend below chart
+                    y: -0.1,
                     x: 0.5,
                     xanchor: 'center',
                     orientation: 'h'
