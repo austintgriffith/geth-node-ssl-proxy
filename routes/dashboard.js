@@ -75,7 +75,8 @@ router.get('/dashboard', (req, res) => {
           lowerfence: [lower],
           upperfence: [upper],
           marker: {
-            color: peerId === fallbackUrl ? '#FFC0CB' : undefined
+            color: peerId === fallbackUrl ? '#FFC0CB' : undefined,
+            size: 2
           },
           line: {
             color: peerId === fallbackUrl ? '#FFC0CB' : undefined
@@ -94,7 +95,10 @@ router.get('/dashboard', (req, res) => {
           boxpoints: 'outliers',
           lowerfence: [lower],
           upperfence: [upper],
-          showlegend: true
+          showlegend: true,
+          marker: {
+            size: 2
+          }
         };
       });
 
@@ -129,7 +133,10 @@ router.get('/dashboard', (req, res) => {
           boxpoints: 'outliers',
           lowerfence: [lower],
           upperfence: [upper],
-          showlegend: true
+          showlegend: true,
+          marker: {
+            size: 2
+          }
         };
       });
 
