@@ -72,7 +72,11 @@ const openMessages = new Map();
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
 app.use(bodyParser.json());
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 // Add this Map to store start times for each bgMessageId
 const requestStartTimes = new Map();

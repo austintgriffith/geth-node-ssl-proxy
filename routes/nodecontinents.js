@@ -5,9 +5,9 @@ const { getDbPool } = require('../utils/dbUtils');
 
 // Enable CORS for this route
 router.use(cors({
-  origin: ['https://client.buidlguidl.com', 'http://localhost:3000'],
-  methods: ['GET'],
-  credentials: true
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 router.get("/nodecontinents", async (req, res) => {
