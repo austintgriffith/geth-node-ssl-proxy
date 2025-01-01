@@ -339,6 +339,15 @@ router.get('/dashboard', (req, res) => {
                 </table>
               </div>
               <h2 class="divider">BY HOST</h2>
+              <div style="margin: 0px auto; max-width: 300px;">
+                <input 
+                  type="number" 
+                  id="hostRequestFilter" 
+                  placeholder="Minimum number of requests..." 
+                  style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box; border: solid 2px black;"
+                  oninput="filterHostPlots()"
+                >
+              </div>
               <div class="chart-container">
                 <div id="hostBarChart"></div>
               </div>
@@ -862,6 +871,68 @@ router.get('/dashboard', (req, res) => {
                 // Make sure these functions are available in the global scope
                 window.prevPage = prevPage;
                 window.nextPage = nextPage;
+              </script>
+              <script>
+                // Initialize variables
+                const hostNames = ${JSON.stringify(hostNames)};
+                const hostCounts = ${JSON.stringify(hostCounts)};
+                const reqHostBoxPlotData = ${JSON.stringify(reqHostBoxPlotData)};
+
+                // Define layout variables
+                const hostBarLayout = {
+                  title: 'Number of Requests per Host',
+                  xaxis: {
+                    title: 'Host',
+                    tickangle: 45
+                  },
+                  yaxis: {
+                    title: 'Number of Requests'
+                  },
+                  height: 800,
+                  margin: {
+                    b: 150  // Increase bottom margin for rotated labels
+                  }
+                };
+
+                const reqHostBoxLayout = {
+                  title: 'Request Duration Distribution by Host',
+                  yaxis: {
+                    title: 'Duration (ms)',
+                    range: [
+                      Math.min(...reqHostBoxPlotData.map(d => d.lowerfence[0])) * 0.95,
+                      Math.max(...reqHostBoxPlotData.map(d => d.upperfence[0])) * 1.05
+                    ],
+                    autorange: false
+                  },
+                  xaxis: {
+                    tickangle: 45
+                  },
+                  height: 800,
+                  margin: {
+                    b: 200
+                  },
+                  showlegend: false
+                };
+
+                function filterHostPlots() {
+                  const minRequests = parseInt(document.getElementById('hostRequestFilter').value, 10) || 0;
+
+                  // Filter host data based on the minimum number of requests
+                  const filteredHostNames = hostNames.filter((host, index) => hostCounts[index] >= minRequests);
+                  const filteredHostCounts = hostCounts.filter(count => count >= minRequests);
+                  const filteredReqHostBoxPlotData = reqHostBoxPlotData.filter(data => filteredHostNames.includes(data.name));
+
+                  // Redraw the host bar chart
+                  Plotly.react('hostBarChart', [{
+                    x: filteredHostNames,
+                    y: filteredHostCounts,
+                    type: 'bar',
+                    name: 'Requests'
+                  }], hostBarLayout);
+
+                  // Redraw the request host box plot
+                  Plotly.react('reqHostBoxChart', filteredReqHostBoxPlotData, reqHostBoxLayout);
+                }
               </script>
             </body>
           </html>
