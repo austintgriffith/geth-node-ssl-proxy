@@ -295,6 +295,11 @@ router.get('/dashboard', (req, res) => {
                   color: white;
                   border-color: #0056b3;
                 }
+                #ownerPointsTable {
+                  width: 100%;
+                  max-width: 800px;
+                  margin: 0 auto;
+                }
               </style>
             </head>
             <body>
@@ -316,7 +321,7 @@ router.get('/dashboard', (req, res) => {
               </div>
               <h2 class="divider">OWNER POINTS</h2>
               <div class="chart-container">
-                <table border="1" cellpadding="5" style="width: 100%;">
+                <table border="1" cellpadding="5" id="ownerPointsTable">
                   <thead>
                     <tr>
                       <th>Owner</th>
