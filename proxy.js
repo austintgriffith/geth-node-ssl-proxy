@@ -22,6 +22,7 @@ const { generateMessageId } = require('./utils/generateMessageId');
 const { handleWebSocketCheckin } = require('./utils/handleWebSocketCheckin');
 const { handleRpcRequest } = require('./utils/handleRpcRequest');
 const { handleFallbackRequest } = require('./utils/handleFallbackRequest');
+const { cleanupOpenMessages } = require('./utils/cleanupOpenMessages');
 
 const { 
   httpsPort, 
@@ -274,26 +275,7 @@ server.listen(httpsPort, () => {
 setInterval(checkForFallback, 5000);
 checkForFallback();
 
-function cleanupOpenMessages() {
-  const now = Date.now();
-  for (const [id, message] of openMessages) {
-    if (now - message.timestamp > messageCleanupInterval) { // 1 minute timeout
-      console.log(`Removing timed out message: ${id}`);
-      message.res.status(504).json({
-        jsonrpc: "2.0",
-        id: id,
-        error: {
-          code: -32603,
-          message: "Gateway Timeout",
-          data: "No response received from the node"
-        }
-      });
-      openMessages.delete(id);
-    }
-  }
-}
-
-setInterval(cleanupOpenMessages, messageCleanupInterval);
+setInterval(() => cleanupOpenMessages(openMessages, messageCleanupInterval), messageCleanupInterval);
 
 module.exports = {
   app,
