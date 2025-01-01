@@ -1,6 +1,7 @@
 
 assignPoints.log
 rpcRequests.log
+rpcRequestsStaging.log
 ownerPointsTableBackup.txt
 .env
 jwt.hex
