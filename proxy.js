@@ -20,6 +20,8 @@ const { makeFallbackRpcRequest } = require('./utils/makeFallbackRpcRequest');
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { generateMessageId } = require('./utils/generateMessageId');
 const { handleWebSocketCheckin } = require('./utils/handleWebSocketCheckin');
+const { handleRpcRequest } = require('./utils/handleRpcRequest');
+const { handleFallbackRequest } = require('./utils/handleFallbackRequest');
 
 const { 
   httpsPort, 
@@ -108,58 +110,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
     
     if (randomClient && randomClient.ws) {
-      try {
-        const clientIp = req.ip || req.connection.remoteAddress;
-        const messageId = generateMessageId(req.body, clientIp);
-
-        console.log('➕ Adding new open message with id:', messageId);
-        openMessages.set(messageId, { req, res, timestamp: Date.now(), rpcId: req.body.id });
-
-        // Store the start time for this messageId
-        requestStartTimes.set(messageId, performance.now());
-
-        const modifiedMessage = {
-          ...req.body,
-          bgMessageId: messageId
-        };
-
-        randomClient.ws.send(JSON.stringify(modifiedMessage));
-
-        setTimeout(() => {
-          if (openMessages.has(messageId)) {
-            console.log('Timeout reached for message:', messageId);
-            const { res, rpcId } = openMessages.get(messageId);
-            res.status(504).json({
-              jsonrpc: "2.0",
-              id: rpcId,
-              error: {
-                code: -32603,
-                message: "Gateway Timeout",
-                data: "No response received from the node"
-              }
-            });
-            openMessages.delete(messageId);
-          }
-        }, wsMessageTimeout);
-
-      } catch (error) {
-        console.error("Error sending RPC request:", error);
-        const clientIp = req.ip || req.connection.remoteAddress;
-        const messageId = generateMessageId(req.body, clientIp);
-        
-        // Log the failed request
-        logRpcRequest(req, messageId, requestStartTimes, false);
-        
-        res.status(500).json({
-          jsonrpc: "2.0",
-          id: req.body.id,
-          error: {
-            code: -32603,
-            message: "Internal error",
-            data: error.message
-          }
-        });
-      }
+      handleRpcRequest(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout);
     } else {
       console.log("Selected client is invalid or has no WebSocket connection");
       const clientIp = req.ip || req.connection.remoteAddress;
@@ -178,37 +129,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
       });
     }
   } else {
-    console.log("NO CLIENTS CONNECTED, using fallback mechanism");
-    try {
-      const clientIp = req.ip || req.connection.remoteAddress;
-      const messageId = generateMessageId(req.body, clientIp);
-      
-      requestStartTimes.set(messageId, performance.now());
-      
-      const result = await makeFallbackRpcRequest(fallbackUrl, req.body, req.headers);
-      
-      // Log the RPC request with timing information
-      req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
-      logRpcRequest(req, messageId, requestStartTimes, true);
-      
-      res.json(result);
-    } catch (error) {
-      const clientIp = req.ip || req.connection.remoteAddress;
-      const messageId = generateMessageId(req.body, clientIp);
-      
-      req.handlingClient = null;
-      logRpcRequest(req, messageId, requestStartTimes, false);
-      
-      res.status(500).json({
-        jsonrpc: "2.0",
-        id: req.body.id,
-        error: {
-          code: -32603,
-          message: "Internal error",
-          data: error.message
-        }
-      });
-    }
+    await handleFallbackRequest(req, res, requestStartTimes);
   }
 
   console.log("POST SERVED", req.body);
