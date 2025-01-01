@@ -525,7 +525,6 @@ router.get('/dashboard', (req, res) => {
                           }
                         ]
                       },
-                      rangeslider: { visible: true },
                       autorange: true,
                       rangemode: 'normal'
                     },
@@ -597,7 +596,6 @@ router.get('/dashboard', (req, res) => {
                           }
                         ]
                       },
-                      rangeslider: {},
                       autorange: true,
                       rangemode: 'normal'
                     },
@@ -655,7 +653,7 @@ router.get('/dashboard', (req, res) => {
                       title: 'Duration (ms)',
                       // Calculate range from all data points' 5th and 95th percentiles
                       range: [
-                        Math.min(...boxPlotData.map(d => d.lowerfence[0])) * 0.95,  // Add small buffer
+                        -10,
                         Math.max(...boxPlotData.map(d => d.upperfence[0])) * 1.05   // Add small buffer
                       ],
                       autorange: false  // Force our custom range
@@ -679,7 +677,7 @@ router.get('/dashboard', (req, res) => {
                     yaxis: {
                       title: 'Duration (ms)',
                       range: [
-                        Math.min(...reqHostBoxPlotData.map(d => d.lowerfence[0])) * 0.95,
+                        -10,
                         Math.max(...reqHostBoxPlotData.map(d => d.upperfence[0])) * 1.05
                       ],
                       autorange: false
@@ -753,7 +751,7 @@ router.get('/dashboard', (req, res) => {
                     yaxis: {
                       title: 'Duration (ms)',
                       range: [
-                        Math.min(...methodBoxPlotData.map(d => d.lowerfence[0])) * 0.95,
+                        -10,
                         Math.max(...methodBoxPlotData.map(d => d.upperfence[0])) * 1.05
                       ],
                       autorange: false
@@ -899,7 +897,7 @@ router.get('/dashboard', (req, res) => {
                   yaxis: {
                     title: 'Duration (ms)',
                     range: [
-                      Math.min(...reqHostBoxPlotData.map(d => d.lowerfence[0])) * 0.95,
+                      -10,
                       Math.max(...reqHostBoxPlotData.map(d => d.upperfence[0])) * 1.05
                     ],
                     autorange: false
