@@ -91,6 +91,11 @@ const server = https.createServer(
 // Create a WebSocket server attached to the HTTPS server
 const wss = new WebSocket.Server({ server });
 
+// Start the HTTPS server (which now includes WebSocket)
+server.listen(httpsPort, () => {
+  console.log(`HTTPS and WebSocket server listening on port ${httpsPort}...`);
+});
+
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("--------------------------------------------------------");
   console.log("📡 RPC REQUEST", req.body);
@@ -226,11 +231,6 @@ const interval = setInterval(() => {
 
 wss.on('close', () => {
   clearInterval(interval);
-});
-
-// Start the HTTPS server (which now includes WebSocket)
-server.listen(httpsPort, () => {
-  console.log(`HTTPS and WebSocket server listening on port ${httpsPort}...`);
 });
 
 setInterval(checkForFallback, 5000);
