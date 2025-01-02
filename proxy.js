@@ -9,10 +9,7 @@ const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const EventEmitter = require('events');
 const { updateRequestOrigin } = require('./database_scripts/updateRequestOrigin');
-const { incrementRpcRequests } = require('./database_scripts/incrementRpcRequests');
-const { incrementOwnerPoints } = require('./database_scripts/incrementOwnerPoints');
 const { logRpcRequest } = require('./utils/logRpcRequest');
-const { getOwnerForClientId } = require('./utils/getOwnerForClientId');
 const { getFilteredConnectedClients } = require('./utils/getFilteredConnectedClients');
 const { checkForFallback } = require('./utils/checkForFallback');
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
@@ -21,6 +18,7 @@ const { handleWebSocketCheckin } = require('./utils/handleWebSocketCheckin');
 const { sendRpcRequestToClient } = require('./utils/sendRpcRequestToClient');
 const { handleFallbackRequest } = require('./utils/handleFallbackRequest');
 const { cleanupOpenMessages } = require('./utils/cleanupOpenMessages');
+const { handleRpcResponseFromClient } = require('./utils/handleRpcResponseFromClient');
 
 const { 
   httpsPort, 
@@ -200,40 +198,7 @@ wss.on('connection', (ws) => {
         handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
         // console.log('Received checkin message');
       } else if (parsedMessage.jsonrpc === '2.0') {
-        const messageId = parsedMessage.bgMessageId;
-        console.log('Received message:', parsedMessage);
-        
-        if (messageId && openMessages.has(messageId)) {
-          console.log(`📲 Found matching open message with id ${messageId}. Sending response.`);
-          const openMessage = openMessages.get(messageId);
-          const responseWithOriginalId = {
-            ...parsedMessage,
-            id: openMessage.rpcId
-          };
-          delete responseWithOriginalId.bgMessageId;
-          openMessage.res.json(responseWithOriginalId);
-          openMessages.delete(messageId);
-
-          // Add client info to the request object
-          const filteredConnectedClients = await getFilteredConnectedClients(connectedClients);
-          const handlingClient = Array.from(filteredConnectedClients.values())
-            .find(c => c.clientID === client.clientID);
-          openMessage.req.handlingClient = handlingClient;
-
-          // Log the RPC request with timing information
-          logRpcRequest(openMessage.req, messageId, requestStartTimes, true);
-
-          // Increment n_rpc_requests for the client that served the request
-          await incrementRpcRequests(client.clientID);
-
-          // Increment points for the client's owner
-          const ownerResult = await getOwnerForClientId(client.clientID);
-          if (ownerResult && ownerResult.owner) {
-            await incrementOwnerPoints(ownerResult.owner);
-          }
-        } else {
-          console.log(`No open message found for id ${messageId}. This might be a delayed response.`);
-        }
+        await handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes);
       } else {
         console.log('Received message with unknown type:', parsedMessage);
       }
