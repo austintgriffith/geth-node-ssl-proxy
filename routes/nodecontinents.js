@@ -1,6 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { getDbPool } = require('../utils/dbUtils');
+const cors = require('cors');
+
+// Enable CORS for this route
+router.use(cors({
+  origin: '*',
+  methods: ['GET', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 router.get("/nodecontinents", async (req, res) => {
   try {
