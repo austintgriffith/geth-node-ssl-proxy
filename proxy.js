@@ -93,6 +93,8 @@ const wss = new WebSocket.Server({ server });
 
 // Start the HTTPS server (which now includes WebSocket)
 server.listen(httpsPort, () => {
+  console.log("----------------------------------------------------------------------------------------------------------------");
+  console.log("----------------------------------------------------------------------------------------------------------------");
   console.log(`HTTPS and WebSocket server listening on port ${httpsPort}...`);
 });
 
