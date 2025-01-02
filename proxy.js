@@ -68,6 +68,7 @@ EventEmitter.defaultMaxListeners = 20;
 
 const openMessages = new Map();
 const requestStartTimes = new Map();
+const connectedClients = new Set();
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -77,6 +78,18 @@ app.use(cors({
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Create the HTTPS server
+const server = https.createServer(
+  {
+    key: fs.readFileSync("server.key"),
+    cert: fs.readFileSync("server.cert"),
+  },
+  app
+);
+
+// Create a WebSocket server attached to the HTTPS server
+const wss = new WebSocket.Server({ server });
 
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("--------------------------------------------------------");
@@ -154,20 +167,6 @@ app.get("/", (req, res) => {
 
   console.log("GET REQUEST SERVED");
 });
-
-// Create the HTTPS server
-const server = https.createServer(
-  {
-    key: fs.readFileSync("server.key"),
-    cert: fs.readFileSync("server.cert"),
-  },
-  app
-);
-
-// Create a WebSocket server attached to the HTTPS server
-const wss = new WebSocket.Server({ server });
-
-const connectedClients = new Set();
 
 // Modify the WebSocket connection handler
 wss.on('connection', (ws) => {
