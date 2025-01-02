@@ -51,8 +51,7 @@ async function makeFallbackRpcRequest(url, body, headers) {
         ...cleanedHeaders,
       },
       httpsAgent: new https.Agent({
-        rejectUnauthorized: false
-        // rejectUnauthorized: true
+        rejectUnauthorized: true
       })
     });
     return response.data;
