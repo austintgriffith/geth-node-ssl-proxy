@@ -2,7 +2,7 @@ const { generateMessageId } = require('./generateMessageId');
 const { logRpcRequest } = require('./logRpcRequest');
 const { performance } = require('perf_hooks');
 
-function handleRpcRequest(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout) {
+function sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout) {
   try {
     const clientIp = req.ip || req.connection.remoteAddress;
     const messageId = generateMessageId(req.body, clientIp);
@@ -57,4 +57,4 @@ function handleRpcRequest(req, res, randomClient, openMessages, requestStartTime
   }
 }
 
-module.exports = { handleRpcRequest };
+module.exports = { sendRpcRequestToClient };

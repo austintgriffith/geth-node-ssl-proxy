@@ -18,7 +18,7 @@ const { checkForFallback } = require('./utils/checkForFallback');
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { generateMessageId } = require('./utils/generateMessageId');
 const { handleWebSocketCheckin } = require('./utils/handleWebSocketCheckin');
-const { handleRpcRequest } = require('./utils/handleRpcRequest');
+const { sendRpcRequestToClient } = require('./utils/sendRpcRequestToClient');
 const { handleFallbackRequest } = require('./utils/handleFallbackRequest');
 const { cleanupOpenMessages } = require('./utils/cleanupOpenMessages');
 
@@ -69,6 +69,7 @@ app.use(dashboardRouter);
 EventEmitter.defaultMaxListeners = 20;
 
 const openMessages = new Map();
+const requestStartTimes = new Map();
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -78,9 +79,6 @@ app.use(cors({
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
-// Add this Map to store start times for each bgMessageId
-const requestStartTimes = new Map();
 
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("--------------------------------------------------------");
@@ -109,7 +107,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
     
     if (randomClient && randomClient.ws) {
-      handleRpcRequest(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout);
+      sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout);
     } else {
       console.log("Selected client is invalid or has no WebSocket connection");
       const clientIp = req.ip || req.connection.remoteAddress;
@@ -221,6 +219,7 @@ wss.on('connection', (ws) => {
           const handlingClient = Array.from(filteredConnectedClients.values())
             .find(c => c.clientID === client.clientID);
           openMessage.req.handlingClient = handlingClient;
+
           // Log the RPC request with timing information
           logRpcRequest(openMessage.req, messageId, requestStartTimes, true);
 
