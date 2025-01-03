@@ -66,9 +66,13 @@ app.use(dashboardRouter);
 
 EventEmitter.defaultMaxListeners = 20;
 
+const connectedClients = new Set();
+
 const openMessages = new Map();
 const requestStartTimes = new Map();
-const connectedClients = new Set();
+
+const openMessagesCheck = new Map();
+const requestStartTimesCheck = new Map();
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -123,28 +127,29 @@ app.post("/", validateRpcRequest, async (req, res) => {
   if(filteredConnectedClients.size > 0) {
     const clientsArray = Array.from(filteredConnectedClients.values());
     const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
+
+    let randomClientCheck;
+    if (clientsArray.length > 1) {
+      const remainingClients = clientsArray.filter(client => client.clientID !== randomClient.clientID);
+      if (remainingClients.length > 0) {
+        randomClientCheck = remainingClients[Math.floor(Math.random() * remainingClients.length)];
+      }
+    }
     
     if (randomClient && randomClient.ws) {
       sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout);
+
+      // Send to second client if available
+      if (randomClientCheck && randomClientCheck.ws && randomClientCheck.clientID !== randomClient.clientID) {
+        sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck);
+      }
     } else {
-      console.log("Selected client is invalid or has no WebSocket connection");
-      const clientIp = req.ip || req.connection.remoteAddress;
-      const messageId = generateMessageId(req.body, clientIp);
-      
-      logRpcRequest(req, messageId, requestStartTimes, false);
-      
-      res.status(500).json({
-        jsonrpc: "2.0",
-        id: req.body.id,
-        error: {
-          code: -32603,
-          message: "Internal error",
-          data: "No valid client available"
-        }
-      });
+      // If no valid client, use fallback (no check request needed)
+      handleFallbackRequest(req, res, requestStartTimes);
     }
   } else {
-    await handleFallbackRequest(req, res, requestStartTimes);
+    // No clients connected, use fallback (no check request needed)
+    handleFallbackRequest(req, res, requestStartTimes);
   }
 
   console.log("POST SERVED", req.body);
@@ -204,7 +209,7 @@ wss.on('connection', (ws) => {
         handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
         // console.log('Received checkin message');
       } else if (parsedMessage.jsonrpc === '2.0') {
-        await handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes);
+        await handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck, requestStartTimesCheck);
       } else {
         console.log('Received message with unknown type:', parsedMessage);
       }
