@@ -9,7 +9,6 @@ const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const EventEmitter = require('events');
 const { updateRequestOrigin } = require('./database_scripts/updateRequestOrigin');
-// const { logRpcRequest } = require('./utils/logRpcRequest');
 const { getFilteredConnectedClients } = require('./utils/getFilteredConnectedClients');
 const { checkForFallback } = require('./utils/checkForFallback');
 const { validateRpcRequest } = require('./utils/validateRpcRequest');

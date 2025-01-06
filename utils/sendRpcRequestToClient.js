@@ -40,13 +40,12 @@ function sendRpcRequestToClient(req, res, randomClient, openMessages, requestSta
         throw new Error('Check messages require openMessagesCheck and requestStartTimesCheck parameters');
       }
       // For check messages, don't include the res object
-      const checkMessageId = messageId + '_';
-      openMessagesCheck.set(checkMessageId, { req, timestamp: Date.now(), rpcId: req.body.id });
-      requestStartTimesCheck.set(checkMessageId, performance.now());
+      openMessagesCheck.set(messageId, { req, timestamp: Date.now(), rpcId: req.body.id });
+      requestStartTimesCheck.set(messageId, performance.now());
 
       const checkModifiedMessage = {
         ...req.body,
-        bgMessageId: checkMessageId
+        bgMessageId: messageId
       };
 
       randomClient.ws.send(JSON.stringify(checkModifiedMessage));
