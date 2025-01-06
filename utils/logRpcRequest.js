@@ -51,9 +51,12 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
 
   logEntry += '\n';
   
-  fs.appendFile('rpcRequests.log', logEntry, (err) => {
+  // Determine which log file to write to based on message ID
+  const logFile = messageId.endsWith('_') ? 'rpcRequestsCheck.log' : 'rpcRequestsMain.log';
+  
+  fs.appendFile(logFile, logEntry, (err) => {
     if (err) {
-      console.error('Error writing to log file:', err);
+      console.error(`Error writing to ${logFile}:`, err);
     }
   });
 

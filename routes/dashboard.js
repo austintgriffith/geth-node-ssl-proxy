@@ -7,7 +7,7 @@ const { getDbPool } = require('../utils/dbUtils');
 
 router.get('/dashboard', (req, res) => {
   console.log('/dashboard');
-  fs.readFile(path.join(__dirname, '../rpcRequests.log'), 'utf8', async (err, data) => {
+  fs.readFile(path.join(__dirname, '../rpcRequestsMain.log'), 'utf8', async (err, data) => {
     if (err) {
       console.error('Error reading log file:', err);
       return res.status(500).send('Error reading log file');
