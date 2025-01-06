@@ -29,7 +29,7 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
       openMessage.req.handlingClient = handlingClient;
 
       // Log the RPC request with timing information
-      logRpcRequest(openMessage.req, messageId, requestStartTimes, true);
+      logRpcRequest(openMessage.req, messageId, requestStartTimes, true, parsedMessage.result);
 
       // Increment n_rpc_requests for the client that served the request
       await incrementRpcRequests(client.clientID);
@@ -50,7 +50,7 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
       .find(c => c.clientID === client.clientID);
     openMessage.req.handlingClient = handlingClient;
     
-    logRpcRequest(openMessage.req, messageId, requestStartTimesCheck || requestStartTimes, true);
+    logRpcRequest(openMessage.req, messageId, requestStartTimesCheck || requestStartTimes, true, parsedMessage.result);
     openMessagesCheck.delete(messageId);
   } else {
     console.log(`No open message found for id ${messageId}. This might be a delayed response.`);

@@ -1,8 +1,9 @@
 const fs = require('fs');
+const crypto = require('crypto');
 const { performance } = require('perf_hooks');
 const { fallbackUrl } = require('../config');
 
-function logRpcRequest(req, messageId, requestStartTimes, success) {
+function logRpcRequest(req, messageId, requestStartTimes, success, response = null) {
   const { method, params } = req.body;
   const startTime = requestStartTimes.get(messageId);
   const endTime = performance.now();
@@ -37,7 +38,18 @@ function logRpcRequest(req, messageId, requestStartTimes, success) {
     }).join(',');
   }
   
-  logEntry += `|${duration.toFixed(3)}|${messageId}|${success}\n`;
+  logEntry += `|${duration.toFixed(3)}|${messageId}|${success}`;
+
+  // Add response data if available
+  if (response) {
+    const hash = crypto.createHash('sha256');
+    hash.update(JSON.stringify(response));
+    const responseHash = hash.digest('hex');
+
+    logEntry += `|${responseHash}`;
+  }
+
+  logEntry += '\n';
   
   fs.appendFile('rpcRequests.log', logEntry, (err) => {
     if (err) {

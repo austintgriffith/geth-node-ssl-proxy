@@ -2,16 +2,14 @@ const { generateMessageId } = require('./generateMessageId');
 const { logRpcRequest } = require('./logRpcRequest');
 const { performance } = require('perf_hooks');
 
-function sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, isCheck = false, openMessagesCheck = null, requestStartTimesCheck = null) {
+function sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, isCheck = false, openMessagesCheck = null, requestStartTimesCheck = null, originalMessageId = null) {
   try {
     const clientIp = req.ip || req.connection.remoteAddress;
-    const messageId = generateMessageId(req.body, clientIp);
+    const messageId = isCheck ? originalMessageId + '_' : generateMessageId(req.body, clientIp);
 
     if (!isCheck) {
       console.log('➕ Adding new open message with id:', messageId);
       openMessages.set(messageId, { req, res, timestamp: Date.now(), rpcId: req.body.id });
-
-      // Store the start time for this messageId
       requestStartTimes.set(messageId, performance.now());
 
       const modifiedMessage = {

@@ -9,7 +9,7 @@ const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const EventEmitter = require('events');
 const { updateRequestOrigin } = require('./database_scripts/updateRequestOrigin');
-const { logRpcRequest } = require('./utils/logRpcRequest');
+// const { logRpcRequest } = require('./utils/logRpcRequest');
 const { getFilteredConnectedClients } = require('./utils/getFilteredConnectedClients');
 const { checkForFallback } = require('./utils/checkForFallback');
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
@@ -137,11 +137,12 @@ app.post("/", validateRpcRequest, async (req, res) => {
     }
     
     if (randomClient && randomClient.ws) {
+      const originalMessageId = generateMessageId(req.body, req.ip || req.connection.remoteAddress);
       sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout);
 
       // Send to second client if available
       if (randomClientCheck && randomClientCheck.ws && randomClientCheck.clientID !== randomClient.clientID) {
-        sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck);
+        sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId);
       }
     } else {
       // If no valid client, use fallback (no check request needed)
