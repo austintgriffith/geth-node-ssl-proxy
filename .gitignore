@@ -1,6 +1,8 @@
 
 assignPoints.log
 rpcRequests.log
+rpcRequestsMain.log
+rpcRequestsCheck.log
 rpcRequestsStaging.log
 ownerPointsTableBackup.txt
 .env

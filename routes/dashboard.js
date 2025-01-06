@@ -7,19 +7,28 @@ const { getDbPool } = require('../utils/dbUtils');
 
 router.get('/dashboard', (req, res) => {
   console.log('/dashboard');
-  fs.readFile(path.join(__dirname, '../rpcRequestsMain.log'), 'utf8', async (err, data) => {
-    if (err) {
-      console.error('Error reading log file:', err);
-      return res.status(500).send('Error reading log file');
-    }
-
+  // Read both log files in parallel
+  Promise.all([
+    new Promise((resolve, reject) => {
+      fs.readFile(path.join(__dirname, '../rpcRequestsMain.log'), 'utf8', (err, data) => {
+        if (err) reject(err);
+        else resolve(data);
+      });
+    }),
+    new Promise((resolve, reject) => {
+      fs.readFile(path.join(__dirname, '../rpcRequestsCheck.log'), 'utf8', (err, data) => {
+        if (err) reject(err);
+        else resolve(data);
+      });
+    })
+  ]).then(async ([mainLogData, checkLogData]) => {
     try {
       const pool = await getDbPool();
       const client = await pool.connect();
       try {
         console.log('Processing log entries...');
-        const logEntries = data.trim().split('\n').map(line => {
-          const [utcTimestamp, epochTime, reqHost, peerId, method, params, duration, messageId, success] = line.split('|');
+        const logEntries = mainLogData.trim().split('\n').map(line => {
+          const [utcTimestamp, epochTime, reqHost, peerId, method, params, duration, messageId, success, resultHash] = line.split('|');
           return { 
             utcTimestamp, 
             epochTime, 
@@ -29,7 +38,8 @@ router.get('/dashboard', (req, res) => {
             params, 
             duration: parseFloat(duration),
             messageId,
-            success: success === 'true'  // Convert string to boolean
+            success: success === 'true',
+            resultHash
           };
         });
 
@@ -261,7 +271,156 @@ router.get('/dashboard', (req, res) => {
 
         const ownerPointsData = ownerPointsResult.rows;
 
-        res.send(`
+        // Process check log entries
+        const checkLogEntries = checkLogData.trim().split('\n').map(line => {
+          const [utcTimestamp, epochTime, reqHost, peerId, method, params, duration, messageId, success, resultHash] = line.split('|');
+          return { 
+            utcTimestamp, 
+            epochTime, 
+            reqHost, 
+            peerId, 
+            method, 
+            params, 
+            duration: parseFloat(duration),
+            messageId,
+            success: success === 'true',
+            resultHash
+          };
+        });
+
+        const additionalHtml = `
+          <div class="chart-container">
+            <h2 class="divider">Check RPC Requests Log</h2>
+            <div style="margin-bottom: 10px;">
+              <button onclick="filterCheckBySuccess(null)" class="filter-btn active">All</button>
+              <button onclick="filterCheckBySuccess(true)" class="filter-btn">Successful</button>
+              <button onclick="filterCheckBySuccess(false)" class="filter-btn">Failed</button>
+            </div>
+            <input 
+              type="text" 
+              id="checkSearchBox" 
+              placeholder="Search check logs..." 
+              style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box;"
+            >
+            <table id="checkLogTable" border="1" cellpadding="5">
+              <thead>
+                <tr>
+                  <th>UTC Timestamp</th>
+                  <th>Request Host</th>
+                  <th>Peer ID</th>
+                  <th>Method</th>
+                  <th>Params</th>
+                  <th>Duration (ms)</th>
+                  <th>Message ID</th>
+                  <th>Result Hash</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Check log entries will be inserted here by JavaScript -->
+              </tbody>
+            </table>
+            <div id="checkPagination">
+              <button onclick="prevCheckPage()">Previous</button>
+              <span id="checkPageInfo"></span>
+              <button onclick="nextCheckPage()">Next</button>
+            </div>
+          </div>
+
+          <script>
+            // Initialize variables for check log table
+            const checkLogEntries = ${JSON.stringify(checkLogEntries)};
+            let filteredCheckEntries = [...checkLogEntries];
+            let checkSuccessFilter = null;
+            const checkEntriesPerPage = 30;
+            let currentCheckPage = 1;
+
+            function filterCheckBySuccess(success) {
+              checkSuccessFilter = success;
+              currentCheckPage = 1;
+              
+              // Update button styles
+              document.querySelectorAll('#checkLogTable ~ div .filter-btn').forEach(btn => btn.classList.remove('active'));
+              document.querySelector(\`#checkLogTable ~ div button[onclick="filterCheckBySuccess(\${success === null ? 'null' : success})"]\`).classList.add('active');
+              
+              applyCheckFilters();
+            }
+
+            function applyCheckFilters() {
+              const searchTerm = document.getElementById('checkSearchBox').value.toLowerCase();
+              
+              filteredCheckEntries = checkLogEntries.filter(entry => {
+                const matchesSearch = 
+                  entry.utcTimestamp.toLowerCase().includes(searchTerm) ||
+                  entry.reqHost.toLowerCase().includes(searchTerm) ||
+                  entry.peerId.toLowerCase().includes(searchTerm) ||
+                  entry.method.toLowerCase().includes(searchTerm) ||
+                  entry.params.toLowerCase().includes(searchTerm) ||
+                  entry.messageId.toLowerCase().includes(searchTerm);
+                  
+                const matchesSuccess = checkSuccessFilter === null || entry.success === checkSuccessFilter;
+                
+                return matchesSearch && matchesSuccess;
+              });
+              
+              renderCheckTable();
+            }
+
+            function renderCheckTable() {
+              const start = (currentCheckPage - 1) * checkEntriesPerPage;
+              const end = start + checkEntriesPerPage;
+              const currentEntries = [...filteredCheckEntries]
+                .reverse()
+                .slice(start, end);
+
+              const tbody = document.querySelector('#checkLogTable tbody');
+              tbody.innerHTML = currentEntries.map(entry => \`
+                  <tr style="background-color: \${entry.success ? 'transparent' : '#ffe6e6'}">
+                    <td>\${entry.utcTimestamp || ''}</td>
+                    <td>\${entry.reqHost || ''}</td>
+                    <td>\${entry.peerId || ''}</td>
+                    <td>\${entry.method || ''}</td>
+                    <td>\${entry.params || ''}</td>
+                    <td>\${typeof entry.duration === 'number' ? entry.duration.toFixed(3) : ''}</td>
+                    <td>\${entry.messageId || ''}</td>
+                    <td>\${entry.resultHash || ''}</td>
+                  </tr>
+              \`).join('');
+
+              document.getElementById('checkPageInfo').textContent = 
+                \`Page \${currentCheckPage} of \${Math.ceil(filteredCheckEntries.length / checkEntriesPerPage)}\`;
+            }
+
+            function prevCheckPage() {
+              if (currentCheckPage > 1) {
+                currentCheckPage--;
+                renderCheckTable();
+              }
+            }
+
+            function nextCheckPage() {
+              const maxPage = Math.ceil(filteredCheckEntries.length / checkEntriesPerPage);
+              if (currentCheckPage < maxPage) {
+                currentCheckPage++;
+                renderCheckTable();
+              }
+            }
+
+            document.getElementById('checkSearchBox').addEventListener('input', function(e) {
+              currentCheckPage = 1;
+              applyCheckFilters();
+            });
+
+            // Initial render
+            renderCheckTable();
+
+            // Make sure these functions are available in the global scope
+            window.prevCheckPage = prevCheckPage;
+            window.nextCheckPage = nextCheckPage;
+            window.filterCheckBySuccess = filterCheckBySuccess;
+          </script>
+        `;
+
+        const finalHtml = res.send(`
           <html>
             <head>
               <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -362,7 +521,7 @@ router.get('/dashboard', (req, res) => {
                 <div id="methodBoxChart"></div>
               </div>
               <div class="chart-container">
-                <h2 class="divider">RPC Requests Log</h2>
+                <h2 class="divider">Main RPC Requests Log</h2>
                 <div style="margin-bottom: 10px;">
                   <button onclick="filterBySuccess(null)" class="filter-btn active">All</button>
                   <button onclick="filterBySuccess(true)" class="filter-btn">Successful</button>
@@ -384,6 +543,7 @@ router.get('/dashboard', (req, res) => {
                       <th>Params</th>
                       <th>Duration (ms)</th>
                       <th>Message ID</th>
+                      <th>Result Hash</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -396,6 +556,7 @@ router.get('/dashboard', (req, res) => {
                   <button onclick="nextPage()">Next</button>
                 </div>
               </div>
+              ${additionalHtml}
               <script>
                 try {
                   // Gauge charts for requests and duration in last hour
@@ -831,6 +992,7 @@ router.get('/dashboard', (req, res) => {
                         <td>\${entry.params || ''}</td>
                         <td>\${typeof entry.duration === 'number' ? entry.duration.toFixed(3) : ''}</td>
                         <td>\${entry.messageId || ''}</td>
+                        <td>\${entry.resultHash || ''}</td>
                       </tr>
                   \`).join('');
 
@@ -942,6 +1104,9 @@ router.get('/dashboard', (req, res) => {
       console.error('Error processing data:', error);
       res.status(500).send(`Error processing data: ${error.message}`);
     }
+  }).catch(error => {
+    console.error('Error reading log files:', error);
+    res.status(500).send('Error reading log files');
   });
 });
 
