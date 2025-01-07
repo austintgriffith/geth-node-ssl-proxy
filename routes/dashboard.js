@@ -296,7 +296,7 @@ router.get('/dashboard', (req, res) => {
 
         const additionalHtml = `
           <div class="chart-container">
-            <h2 class="divider">Check RPC Requests Log</h2>
+            <h2 class="tableHeader">Check RPC Requests Log</h2>
             <div style="margin-bottom: 10px;">
               <button onclick="filterCheckBySuccess(null)" class="filter-btn active">All</button>
               <button onclick="filterCheckBySuccess(true)" class="filter-btn">Successful</button>
@@ -439,7 +439,7 @@ router.get('/dashboard', (req, res) => {
 
         const messageChecksHtml = `
           <div class="chart-container">
-            <h2 class="divider">Message Checks Log</h2>
+            <h2 class="tableHeader">Message Checks Log</h2>
             <div style="margin-bottom: 10px;">
               <button onclick="filterMessageChecksByMatch(null)" class="filter-btn active">All</button>
               <button onclick="filterMessageChecksByMatch(true)" class="filter-btn">Matching</button>
@@ -573,6 +573,9 @@ router.get('/dashboard', (req, res) => {
                   font-weight: bold;
                   margin: 60px 0px;
                 }
+                .tableHeader {
+                  text-align: center;
+                }
                 #logTable {
                   width: 100%;
                 }
@@ -659,7 +662,7 @@ router.get('/dashboard', (req, res) => {
                 <div id="methodBoxChart"></div>
               </div>
               <div class="chart-container">
-                <h2 class="divider">Main RPC Requests Log</h2>
+                <h2 class="tableHeader">Main RPC Requests Log</h2>
                 <div style="margin-bottom: 10px;">
                   <button onclick="filterBySuccess(null)" class="filter-btn active">All</button>
                   <button onclick="filterBySuccess(true)" class="filter-btn">Successful</button>
