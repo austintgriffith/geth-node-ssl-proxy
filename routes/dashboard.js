@@ -20,8 +20,14 @@ router.get('/dashboard', (req, res) => {
         if (err) reject(err);
         else resolve(data);
       });
+    }),
+    new Promise((resolve, reject) => {
+      fs.readFile(path.join(__dirname, '../rpcMessageChecks.log'), 'utf8', (err, data) => {
+        if (err) reject(err);
+        else resolve(data);
+      });
     })
-  ]).then(async ([mainLogData, checkLogData]) => {
+  ]).then(async ([mainLogData, checkLogData, messageChecksData]) => {
     try {
       const pool = await getDbPool();
       const client = await pool.connect();
@@ -420,6 +426,138 @@ router.get('/dashboard', (req, res) => {
           </script>
         `;
 
+        // Process message checks log entries
+        const messageChecksEntries = messageChecksData.trim().split('\n').map(line => {
+          const [messageId, mainPeerId, checkPeerId, matchResult] = line.split('|');
+          return {
+            messageId,
+            mainPeerId,
+            checkPeerId,
+            matchResult: matchResult === 'true'
+          };
+        });
+
+        const messageChecksHtml = `
+          <div class="chart-container">
+            <h2 class="divider">Message Checks Log</h2>
+            <div style="margin-bottom: 10px;">
+              <button onclick="filterMessageChecksByMatch(null)" class="filter-btn active">All</button>
+              <button onclick="filterMessageChecksByMatch(true)" class="filter-btn">Matching</button>
+              <button onclick="filterMessageChecksByMatch(false)" class="filter-btn">Non-Matching</button>
+            </div>
+            <input 
+              type="text" 
+              id="messageChecksSearchBox" 
+              placeholder="Search message checks..." 
+              style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box;"
+            >
+            <table id="messageChecksTable" border="1" cellpadding="5">
+              <thead>
+                <tr>
+                  <th>Message ID</th>
+                  <th>Main Peer ID</th>
+                  <th>Check Peer ID</th>
+                  <th>Match Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Message check entries will be inserted here by JavaScript -->
+              </tbody>
+            </table>
+            <div id="messageChecksPagination">
+              <button onclick="prevMessageChecksPage()">Previous</button>
+              <span id="messageChecksPageInfo"></span>
+              <button onclick="nextMessageChecksPage()">Next</button>
+            </div>
+          </div>
+
+          <script>
+            // Initialize variables for message checks table
+            const messageChecksEntries = ${JSON.stringify(messageChecksEntries)};
+            let filteredMessageChecksEntries = [...messageChecksEntries];
+            let messageChecksMatchFilter = null;
+            const messageChecksEntriesPerPage = 30;
+            let currentMessageChecksPage = 1;
+
+            function filterMessageChecksByMatch(matchResult) {
+              messageChecksMatchFilter = matchResult;
+              currentMessageChecksPage = 1;
+              
+              // Update button styles
+              document.querySelectorAll('#messageChecksTable ~ div .filter-btn').forEach(btn => btn.classList.remove('active'));
+              document.querySelector(\`#messageChecksTable ~ div button[onclick="filterMessageChecksByMatch(\${matchResult === null ? 'null' : matchResult})"]\`).classList.add('active');
+              
+              applyMessageChecksFilters();
+            }
+
+            function applyMessageChecksFilters() {
+              const searchTerm = document.getElementById('messageChecksSearchBox').value.toLowerCase();
+              
+              filteredMessageChecksEntries = messageChecksEntries.filter(entry => {
+                const matchesSearch = 
+                  entry.messageId.toLowerCase().includes(searchTerm) ||
+                  entry.mainPeerId.toLowerCase().includes(searchTerm) ||
+                  entry.checkPeerId.toLowerCase().includes(searchTerm);
+                  
+                const matchesResult = messageChecksMatchFilter === null || entry.matchResult === messageChecksMatchFilter;
+                
+                return matchesSearch && matchesResult;
+              });
+              
+              renderMessageChecksTable();
+            }
+
+            function renderMessageChecksTable() {
+              const start = (currentMessageChecksPage - 1) * messageChecksEntriesPerPage;
+              const end = start + messageChecksEntriesPerPage;
+              const currentEntries = [...filteredMessageChecksEntries]
+                .reverse()
+                .slice(start, end);
+
+              const tbody = document.querySelector('#messageChecksTable tbody');
+              tbody.innerHTML = currentEntries.map(entry => \`
+                  <tr style="background-color: \${entry.matchResult ? 'transparent' : '#ffe6e6'}">
+                    <td>\${entry.messageId || ''}</td>
+                    <td>\${entry.mainPeerId || ''}</td>
+                    <td>\${entry.checkPeerId || ''}</td>
+                    <td>\${entry.matchResult.toString()}</td>
+                  </tr>
+              \`).join('');
+
+              document.getElementById('messageChecksPageInfo').textContent = 
+                \`Page \${currentMessageChecksPage} of \${Math.ceil(filteredMessageChecksEntries.length / messageChecksEntriesPerPage)}\`;
+            }
+
+            function prevMessageChecksPage() {
+              if (currentMessageChecksPage > 1) {
+                currentMessageChecksPage--;
+                renderMessageChecksTable();
+              }
+            }
+
+            function nextMessageChecksPage() {
+              const maxPage = Math.ceil(filteredMessageChecksEntries.length / messageChecksEntriesPerPage);
+              if (currentMessageChecksPage < maxPage) {
+                currentMessageChecksPage++;
+                renderMessageChecksTable();
+              }
+            }
+
+            document.getElementById('messageChecksSearchBox').addEventListener('input', function(e) {
+              currentMessageChecksPage = 1;
+              applyMessageChecksFilters();
+            });
+
+            // Initial render
+            renderMessageChecksTable();
+
+            // Make sure these functions are available in the global scope
+            window.prevMessageChecksPage = prevMessageChecksPage;
+            window.nextMessageChecksPage = nextMessageChecksPage;
+            window.filterMessageChecksByMatch = filterMessageChecksByMatch;
+          </script>
+        `;
+
         const finalHtml = res.send(`
           <html>
             <head>
@@ -557,6 +695,7 @@ router.get('/dashboard', (req, res) => {
                 </div>
               </div>
               ${additionalHtml}
+              ${messageChecksHtml}
               <script>
                 try {
                   // Gauge charts for requests and duration in last hour
