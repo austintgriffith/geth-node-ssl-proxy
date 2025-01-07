@@ -38,13 +38,15 @@ async function getFilteredConnectedClients(connectedClients) {
       console.log(`👥 Total active clients: ${result.rows.length}`);
       console.log(`🔌 Clients at latest block ${largestBlockNumber}: ${filteredClients.size}`);
 
-      return filteredClients;
+      // Return as an array to properly handle both values
+      return [filteredClients, largestBlockNumber];
     } finally {
       client.release();
     }
-  } catch (err) {
-    console.error('Error in getFilteredConnectedClients:', err);
-    return new Map(); // Return an empty Map in case of error
+  } catch (error) {
+    console.error('Error in getFilteredConnectedClients:', error);
+    // Return empty Map and 0 in case of error
+    return [new Map(), 0];
   }
 }
 

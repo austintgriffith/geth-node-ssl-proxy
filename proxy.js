@@ -18,6 +18,7 @@ const { sendRpcRequestToClient } = require('./utils/sendRpcRequestToClient');
 const { handleFallbackRequest } = require('./utils/handleFallbackRequest');
 const { cleanupOpenMessages } = require('./utils/cleanupOpenMessages');
 const { handleRpcResponseFromClient } = require('./utils/handleRpcResponseFromClient');
+const { processMessageChecks } = require('./utils/processMessageChecks');
 
 const { 
   httpsPort, 
@@ -44,6 +45,7 @@ const blockRouter = require('./routes/block');
 const syncRouter = require('./routes/sync');
 const checkinRouter = require('./routes/checkin');
 const dashboardRouter = require('./routes/dashboard');
+const createPendingMessageChecksRouter = require('./routes/listpendingmessagechecks');
 
 app.use(nodeContinentsRouter);
 app.use(requestOriginsRouter);
@@ -72,6 +74,10 @@ const requestStartTimes = new Map();
 
 const openMessagesCheck = new Map();
 const requestStartTimesCheck = new Map();
+
+const pendingMessageChecks = new Map();
+
+app.use(createPendingMessageChecksRouter(pendingMessageChecks));
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -121,7 +127,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
   await updateRequestOrigin(reqHost);
 
-  const filteredConnectedClients = await getFilteredConnectedClients(connectedClients);
+  const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
 
   if(filteredConnectedClients.size > 0) {
     const clientsArray = Array.from(filteredConnectedClients.values());
@@ -137,19 +143,19 @@ app.post("/", validateRpcRequest, async (req, res) => {
     
     if (randomClient && randomClient.ws) {
       const originalMessageId = generateMessageId(req.body, req.ip || req.connection.remoteAddress);
-      sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout);
+      sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, null, pendingMessageChecks, null);
 
       // Send to second client if available
       if (randomClientCheck && randomClientCheck.ws && randomClientCheck.clientID !== randomClient.clientID) {
-        sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId);
+        sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId, pendingMessageChecks, largestBlockNumber);
       }
     } else {
       // If no valid client, use fallback (no check request needed)
-      handleFallbackRequest(req, res, requestStartTimes);
+      handleFallbackRequest(req, res, requestStartTimes, pendingMessageChecks);
     }
   } else {
     // No clients connected, use fallback (no check request needed)
-    handleFallbackRequest(req, res, requestStartTimes);
+    handleFallbackRequest(req, res, requestStartTimes, pendingMessageChecks);
   }
 
   console.log("POST SERVED", req.body);
@@ -209,7 +215,7 @@ wss.on('connection', (ws) => {
         handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
         // console.log('Received checkin message');
       } else if (parsedMessage.jsonrpc === '2.0') {
-        await handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck, requestStartTimesCheck);
+        await handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck, requestStartTimesCheck, pendingMessageChecks);
       } else {
         console.log('Received message with unknown type:', parsedMessage);
       }
@@ -244,6 +250,11 @@ setInterval(checkForFallback, 5000);
 checkForFallback();
 
 setInterval(() => cleanupOpenMessages(openMessages, messageCleanupInterval), messageCleanupInterval);
+
+// Process message checks every 10 seconds
+setInterval(() => processMessageChecks(pendingMessageChecks), 10000);
+
+// Set up an interval to check for pending message checks, compare results, and log results
 
 module.exports = {
   app,

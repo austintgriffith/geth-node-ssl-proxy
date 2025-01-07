@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const { performance } = require('perf_hooks');
 const { fallbackUrl } = require('../config');
 
-function logRpcRequest(req, messageId, requestStartTimes, success, response = null) {
+function logRpcRequest(req, messageId, requestStartTimes, success, response = null, pendingMessageChecks = null) {
   const { method, params } = req.body;
   const startTime = requestStartTimes.get(messageId);
   const endTime = performance.now();
@@ -40,12 +40,16 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
   
   logEntry += `|${duration.toFixed(3)}|${messageId}|${success}`;
 
+  let responseHash = null;
   // Add response data if available
   if (response) {
-    const hash = crypto.createHash('sha256');
-    hash.update(JSON.stringify(response));
-    const responseHash = hash.digest('hex');
+    // DON'T DELETE THIS COMMENTED CODE!
+    // const hash = crypto.createHash('sha256');
+    // hash.update(JSON.stringify(response));
+    // responseHash = hash.digest('hex');
+    // logEntry += `|${responseHash}`;
 
+    responseHash = response;
     logEntry += `|${responseHash}`;
   }
 
@@ -59,6 +63,15 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
       console.error(`Error writing to ${logFile}:`, err);
     }
   });
+
+  // Add to pendingMessageChecks if it's provided and this is a successful request
+  if (pendingMessageChecks && success && responseHash) {
+    pendingMessageChecks.set(messageId, {
+      peerId,
+      messageId,
+      responseHash
+    });
+  }
 
   // Clean up the start time
   requestStartTimes.delete(messageId);

@@ -4,7 +4,7 @@ const { incrementRpcRequests } = require('../database_scripts/incrementRpcReques
 const { getOwnerForClientId } = require('./getOwnerForClientId');
 const { incrementOwnerPoints } = require('../database_scripts/incrementOwnerPoints');
 
-async function handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck = null, requestStartTimesCheck = null) {
+async function handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck = null, requestStartTimesCheck = null, pendingMessageChecks = null) {
   const messageId = parsedMessage.bgMessageId;
   console.log('Received message:', parsedMessage);
   
@@ -23,13 +23,13 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
       openMessages.delete(messageId);
 
       // Add client info to the request object
-      const filteredConnectedClients = await getFilteredConnectedClients(connectedClients);
+      const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
       const handlingClient = Array.from(filteredConnectedClients.values())
         .find(c => c.clientID === client.clientID);
       openMessage.req.handlingClient = handlingClient;
 
       // Log the RPC request with timing information
-      logRpcRequest(openMessage.req, messageId, requestStartTimes, true, parsedMessage.result);
+      logRpcRequest(openMessage.req, messageId, requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
 
       // Increment n_rpc_requests for the client that served the request
       await incrementRpcRequests(client.clientID);
@@ -45,12 +45,12 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
     const openMessage = openMessagesCheck.get(messageId);
     
     // Add client info to the request object for check messages
-    const filteredConnectedClients = await getFilteredConnectedClients(connectedClients);
+    const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
     const handlingClient = Array.from(filteredConnectedClients.values())
       .find(c => c.clientID === client.clientID);
     openMessage.req.handlingClient = handlingClient;
     
-    logRpcRequest(openMessage.req, messageId, requestStartTimesCheck || requestStartTimes, true, parsedMessage.result);
+    logRpcRequest(openMessage.req, messageId, requestStartTimesCheck || requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
     openMessagesCheck.delete(messageId);
   } else {
     console.log(`No open message found for id ${messageId}. This might be a delayed response.`);

@@ -5,7 +5,7 @@ const axios = require("axios");
 const { performance } = require('perf_hooks');
 const { fallbackUrl } = require('../config');
 
-async function handleFallbackRequest(req, res, requestStartTimes) {
+async function handleFallbackRequest(req, res, requestStartTimes, pendingMessageChecks = null) {
   console.log("NO CLIENTS CONNECTED, using fallback mechanism");
   try {
     const clientIp = req.ip || req.connection.remoteAddress;
@@ -17,7 +17,7 @@ async function handleFallbackRequest(req, res, requestStartTimes) {
     
     // Log the RPC request with timing information
     req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
-    logRpcRequest(req, messageId, requestStartTimes, true);
+    logRpcRequest(req, messageId, requestStartTimes, true, result, pendingMessageChecks);
     
     res.json(result);
   } catch (error) {
@@ -25,7 +25,7 @@ async function handleFallbackRequest(req, res, requestStartTimes) {
     const messageId = generateMessageId(req.body, clientIp);
     
     req.handlingClient = null;
-    logRpcRequest(req, messageId, requestStartTimes, false);
+    logRpcRequest(req, messageId, requestStartTimes, false, null, pendingMessageChecks);
     
     res.status(500).json({
       jsonrpc: "2.0",

@@ -4,6 +4,7 @@ rpcRequests.log
 rpcRequestsMain.log
 rpcRequestsCheck.log
 rpcRequestsStaging.log
+rpcMessageChecks.log
 ownerPointsTableBackup.txt
 .env
 jwt.hex
