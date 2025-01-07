@@ -516,7 +516,10 @@ router.get('/dashboard', (req, res) => {
 
               const tbody = document.querySelector('#messageChecksTable tbody');
               tbody.innerHTML = currentEntries.map(entry => \`
-                  <tr style="background-color: \${entry.matchResult ? 'transparent' : '#ffe6e6'}">
+                  <tr style="background-color: \${entry.matchResult ? 'transparent' : '#ffe6e6'}" 
+                      onclick="highlightRelatedRows('\${entry.messageId}')" 
+                      class="clickable-row" 
+                      data-message-id="\${entry.messageId}">
                     <td>\${entry.messageId || ''}</td>
                     <td>\${entry.mainPeerId || ''}</td>
                     <td>\${entry.checkPeerId || ''}</td>
@@ -599,6 +602,15 @@ router.get('/dashboard', (req, res) => {
                   width: 100%;
                   max-width: 800px;
                   margin: 0 auto;
+                }
+                .clickable-row {
+                  cursor: pointer;
+                }
+                .clickable-row:hover {
+                  background-color: #f0f0f0 !important;
+                }
+                .highlighted-row {
+                  background-color: #90EE90 !important;
                 }
               </style>
             </head>
@@ -1235,6 +1247,92 @@ router.get('/dashboard', (req, res) => {
                   // Redraw the request host box plot
                   Plotly.react('reqHostBoxChart', filteredReqHostBoxPlotData, reqHostBoxLayout);
                 }
+              </script>
+              <script>
+                // Add this new function to handle row highlighting
+                function highlightRelatedRows(messageId) {
+                  // Clear any existing highlights
+                  document.querySelectorAll('.highlighted-row').forEach(row => {
+                    row.classList.remove('highlighted-row');
+                  });
+
+                  // Find and highlight the message check row
+                  document.querySelector(\`#messageChecksTable tr[data-message-id="\${messageId}"]\`)?.classList.add('highlighted-row');
+
+                  // Find the indices in filtered entries
+                  const mainIndex = filteredEntries.findIndex(entry => entry.messageId === messageId);
+                  const checkIndex = filteredCheckEntries.findIndex(entry => entry.messageId === messageId + '_');
+
+                  // Update main log table
+                  if (mainIndex !== -1) {
+                    const targetPage = Math.floor((filteredEntries.length - mainIndex - 1) / entriesPerPage) + 1;
+                    if (currentPage !== targetPage) {
+                      currentPage = targetPage;
+                      renderTable();
+                      // Highlight after render
+                      setTimeout(() => {
+                        const mainRows = Array.from(document.querySelectorAll('#logTable tbody tr'));
+                        mainRows.forEach(row => {
+                          if (row.children[6].textContent === messageId) {
+                            row.classList.add('highlighted-row');
+                          }
+                        });
+                      }, 0);
+                    } else {
+                      // Highlight immediately if no page change
+                      const mainRows = Array.from(document.querySelectorAll('#logTable tbody tr'));
+                      mainRows.forEach(row => {
+                        if (row.children[6].textContent === messageId) {
+                          row.classList.add('highlighted-row');
+                        }
+                      });
+                    }
+                  }
+
+                  // Update check log table
+                  if (checkIndex !== -1) {
+                    const targetPage = Math.floor((filteredCheckEntries.length - checkIndex - 1) / checkEntriesPerPage) + 1;
+                    if (currentCheckPage !== targetPage) {
+                      currentCheckPage = targetPage;
+                      renderCheckTable();
+                      // Highlight after render
+                      setTimeout(() => {
+                        const checkRows = Array.from(document.querySelectorAll('#checkLogTable tbody tr'));
+                        checkRows.forEach(row => {
+                          if (row.children[6].textContent === messageId + '_') {
+                            row.classList.add('highlighted-row');
+                          }
+                        });
+                      }, 0);
+                    } else {
+                      // Highlight immediately if no page change
+                      const checkRows = Array.from(document.querySelectorAll('#checkLogTable tbody tr'));
+                      checkRows.forEach(row => {
+                        if (row.children[6].textContent === messageId + '_') {
+                          row.classList.add('highlighted-row');
+                        }
+                      });
+                    }
+                  }
+                }
+
+                // Add the styles to the document
+                document.head.insertAdjacentHTML('beforeend', \`
+                  <style>
+                    .clickable-row {
+                      cursor: pointer;
+                    }
+                    .clickable-row:hover {
+                      background-color: #f0f0f0 !important;
+                    }
+                    .highlighted-row {
+                      background-color: #90EE90 !important;
+                    }
+                  </style>
+                \`);
+
+                // Make the function available globally
+                window.highlightRelatedRows = highlightRelatedRows;
               </script>
             </body>
           </html>
