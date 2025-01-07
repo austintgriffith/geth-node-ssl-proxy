@@ -64,10 +64,38 @@ function sendRpcRequestToClient(req, res, randomClient, openMessages, requestSta
       // Create modified message with params array
       const checkModifiedMessage = {
         ...req.body,
-        bgMessageId: messageId,
-        params: [...(req.body.params || []), blockNumberHex]
+        bgMessageId: messageId
       };
-
+      
+      // Only modify params if the method accepts block number
+      if (methodsAcceptingBlockNumber.includes(req.body.method)) {
+        const blockNumberHex = largestBlockNumber ? '0x' + largestBlockNumber.toString(16) : null;
+        
+        // Handle different parameter structures
+        if (req.body.params && req.body.params.length > 0) {
+          const firstParam = req.body.params[0];
+          if (typeof firstParam === 'object' && firstParam !== null) {
+            // If first param is an object, only add blockNumber if it doesn't exist
+            if (!firstParam.hasOwnProperty('blockNumber')) {
+              checkModifiedMessage.params = [
+                { ...firstParam, blockNumber: blockNumberHex },
+                ...req.body.params.slice(1)
+              ];
+            }
+          } else {
+            // For array params, check if last param is a block number (hex string)
+            const lastParam = req.body.params[req.body.params.length - 1];
+            if (!(typeof lastParam === 'string' && lastParam.startsWith('0x'))) {
+              // Only append block number if one isn't already present
+              checkModifiedMessage.params = [...req.body.params, blockNumberHex];
+            }
+          }
+        } else {
+          // No parameters provided, add block number
+          checkModifiedMessage.params = [blockNumberHex];
+        }
+      }
+      
       randomClient.ws.send(JSON.stringify(checkModifiedMessage));
     }
   } catch (error) {

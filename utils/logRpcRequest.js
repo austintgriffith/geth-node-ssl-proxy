@@ -49,7 +49,7 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
     // responseHash = hash.digest('hex');
     // logEntry += `|${responseHash}`;
 
-    responseHash = response;
+    responseHash = typeof response === 'object' ? JSON.stringify(response) : response;
     logEntry += `|${responseHash}`;
   }
 
@@ -65,7 +65,8 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
   });
 
   // Add to pendingMessageChecks if it's provided and this is a successful request
-  if (pendingMessageChecks && success && responseHash) {
+  // and this is not a fallback request
+  if (pendingMessageChecks && success && responseHash && req.handlingClient !== null) {
     pendingMessageChecks.set(messageId, {
       peerId,
       messageId,

@@ -151,11 +151,11 @@ app.post("/", validateRpcRequest, async (req, res) => {
       }
     } else {
       // If no valid client, use fallback (no check request needed)
-      handleFallbackRequest(req, res, requestStartTimes, pendingMessageChecks);
+      handleFallbackRequest(req, res, requestStartTimes, null);
     }
   } else {
     // No clients connected, use fallback (no check request needed)
-    handleFallbackRequest(req, res, requestStartTimes, pendingMessageChecks);
+    handleFallbackRequest(req, res, requestStartTimes, null);
   }
 
   console.log("POST SERVED", req.body);

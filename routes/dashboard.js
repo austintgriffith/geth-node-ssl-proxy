@@ -457,7 +457,7 @@ router.get('/dashboard', (req, res) => {
                   <th>Message ID</th>
                   <th>Main Peer ID</th>
                   <th>Check Peer ID</th>
-                  <th>Match Result</th>
+                  <th>Results Match?</th>
                 </tr>
               </thead>
               <tbody>

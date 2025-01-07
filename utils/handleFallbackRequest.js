@@ -17,7 +17,7 @@ async function handleFallbackRequest(req, res, requestStartTimes, pendingMessage
     
     // Log the RPC request with timing information
     req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
-    logRpcRequest(req, messageId, requestStartTimes, true, result, pendingMessageChecks);
+    logRpcRequest(req, messageId, requestStartTimes, true, result, null);
     
     res.json(result);
   } catch (error) {
@@ -25,7 +25,7 @@ async function handleFallbackRequest(req, res, requestStartTimes, pendingMessage
     const messageId = generateMessageId(req.body, clientIp);
     
     req.handlingClient = null;
-    logRpcRequest(req, messageId, requestStartTimes, false, null, pendingMessageChecks);
+    logRpcRequest(req, messageId, requestStartTimes, false, null, null);
     
     res.status(500).json({
       jsonrpc: "2.0",
