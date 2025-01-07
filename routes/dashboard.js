@@ -483,9 +483,9 @@ router.get('/dashboard', (req, res) => {
               messageChecksMatchFilter = matchResult;
               currentMessageChecksPage = 1;
               
-              // Update button styles
-              document.querySelectorAll('#messageChecksTable ~ div .filter-btn').forEach(btn => btn.classList.remove('active'));
-              document.querySelector(\`#messageChecksTable ~ div button[onclick="filterMessageChecksByMatch(\${matchResult === null ? 'null' : matchResult})"]\`).classList.add('active');
+              // Update button styles - Using string concatenation instead of nested template literals
+              document.querySelectorAll('.chart-container:has(#messageChecksTable) .filter-btn').forEach(btn => btn.classList.remove('active'));
+              document.querySelector('.chart-container:has(#messageChecksTable) button[onclick="filterMessageChecksByMatch(' + (matchResult === null ? 'null' : matchResult) + ')"]').classList.add('active');
               
               applyMessageChecksFilters();
             }
