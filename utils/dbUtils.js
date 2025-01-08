@@ -1,6 +1,7 @@
 const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
 const { Pool } = require('pg');
 require('dotenv').config();
+const { dbHost } = require('../config');
 
 let pool;
 
@@ -24,7 +25,7 @@ async function getDbConfig() {
     const secret = JSON.parse(response.SecretString);
 
     return {
-      host: 'bgclientdb.cluster-cjoo0gi8an8c.us-east-1.rds.amazonaws.com',
+      host: dbHost,
       user: secret.username,
       password: secret.password,
       database: secret.dbname || 'postgres',

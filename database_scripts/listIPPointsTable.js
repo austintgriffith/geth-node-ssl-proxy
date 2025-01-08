@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
+const { dbHost } = require('../config');
 require('dotenv').config();
 
 async function listPointsTable() {
@@ -26,7 +27,7 @@ async function listPointsTable() {
     const secret = JSON.parse(response.SecretString);
 
     const dbConfig = {
-      host: 'bgclientdb.cluster-cjoo0gi8an8c.us-east-1.rds.amazonaws.com',
+      host: dbHost,
       user: secret.username,
       password: secret.password,
       database: secret.dbname || 'postgres',
