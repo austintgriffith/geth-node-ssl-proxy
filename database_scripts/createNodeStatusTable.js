@@ -173,6 +173,19 @@ const addOwnerColumnQuery = `
   END $$;
 `;
 
+const addIpLocLookupEpochColumnQuery = `
+  DO $$ 
+  BEGIN 
+    IF NOT EXISTS (
+      SELECT FROM information_schema.columns 
+      WHERE table_name = 'node_status' AND column_name = 'ip_loc_lookup_epoch'
+    ) THEN 
+      ALTER TABLE node_status 
+      ADD COLUMN ip_loc_lookup_epoch BIGINT;
+    END IF; 
+  END $$;
+`;
+
 async function createTables() {
   console.log("Creating/updating tables...");
 
@@ -437,6 +450,7 @@ async function createTables() {
       await client.query(removeSecSinceIpLocColumnQuery);
       await client.query(addContinentColumnQuery);
       await client.query(addOwnerColumnQuery);
+      await client.query(addIpLocLookupEpochColumnQuery);
 
       console.log("Tables created/updated successfully");
     } finally {
