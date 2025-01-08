@@ -1,6 +1,4 @@
-const { Pool } = require('pg');
-const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
-const { dbHost } = require('../config');
+const { getDbPool } = require('../utils/dbUtils');
 require('dotenv').config();
 const readline = require('readline');
 
@@ -26,62 +24,30 @@ async function transferIpPointsForUser(OWNER, POINTS_TO_ADD) {
 
   console.log("Proceeding with point addition...");
 
-  const secret_name = process.env.RDS_SECRET_NAME;
-  const client = new SecretsManagerClient({ 
-    region: "us-east-1",
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
-  });
-
   let pool;
-
   try {
-    const response = await client.send(
-      new GetSecretValueCommand({
-        SecretId: secret_name,
-        VersionStage: "AWSCURRENT",
-      })
-    );
-    const secret = JSON.parse(response.SecretString);
-
-    const dbConfig = {
-      host: dbHost,
-      user: secret.username,
-      password: secret.password,
-      database: secret.dbname || 'postgres',
-      port: 5432,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    };
-
-    pool = new Pool(dbConfig);
-
-    const updatePointsQuery = `
-      INSERT INTO owner_points (owner, points)
-      VALUES ($1, $2)
-      ON CONFLICT (owner)
-      DO UPDATE SET points = owner_points.points + $2;
-    `;
-
+    pool = await getDbPool();
+    const dbClient = await pool.connect();
     try {
-      const dbClient = await pool.connect();
-      try {
-        const result = await dbClient.query(updatePointsQuery, [OWNER, POINTS_TO_ADD]);
-        console.log(`Successfully added ${POINTS_TO_ADD} points to ${OWNER}`);
-        console.log(`Rows affected: ${result.rowCount}`);
-      } finally {
-        dbClient.release();
-      }
-    } catch (err) {
-      console.error(`Error updating points for ${OWNER}:`, err);
+      const updatePointsQuery = `
+        INSERT INTO owner_points (owner, points)
+        VALUES ($1, $2)
+        ON CONFLICT (owner)
+        DO UPDATE SET points = owner_points.points + $2;
+      `;
+
+      const result = await dbClient.query(updatePointsQuery, [OWNER, POINTS_TO_ADD]);
+      console.log(`Successfully added ${POINTS_TO_ADD} points to ${OWNER}`);
+      console.log(`Rows affected: ${result.rowCount}`);
     } finally {
-      await pool.end();
+      dbClient.release();
     }
   } catch (err) {
-    console.error('Error connecting to the database:', err);
+    console.error(`Error updating points for ${OWNER}:`, err);
+  } finally {
+    if (pool) {
+      await pool.end();
+    }
   }
 }
 

@@ -1,6 +1,4 @@
-const { Pool } = require('pg');
-const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
-const { dbHost } = require('../config');
+const { getDbPool } = require('../utils/dbUtils');
 require('dotenv').config();
 
 const removeMultiAddrColumnQuery = `
@@ -178,268 +176,239 @@ const addOwnerColumnQuery = `
 async function createTables() {
   console.log("Creating/updating tables...");
 
-  const secret_name = process.env.RDS_SECRET_NAME;
-  const secretsClient = new SecretsManagerClient({ 
-    region: "us-east-1",
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
-  });
-
   let pool;
   let client;
 
   try {
-    const response = await secretsClient.send(
-      new GetSecretValueCommand({
-        SecretId: secret_name,
-        VersionStage: "AWSCURRENT",
-      })
-    );
-    const secret = JSON.parse(response.SecretString);
-
-    const dbConfig = {
-      host: dbHost,
-      user: secret.username,
-      password: secret.password,
-      database: secret.dbname || 'postgres',
-      port: 5432,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    };
-
-    pool = new Pool(dbConfig);
-
-    const createTableQuery = `
-      CREATE TABLE IF NOT EXISTS node_status (
-        id VARCHAR(255) PRIMARY KEY,
-        node_version VARCHAR(50),
-        execution_client VARCHAR(100),
-        consensus_client VARCHAR(100),
-        cpu_usage DECIMAL(5,2),
-        memory_usage DECIMAL(5,2),
-        storage_usage DECIMAL(5,2),
-        block_number BIGINT,
-        block_hash VARCHAR(66),
-        last_checkin TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        ip_address VARCHAR(45),
-        execution_peers BIGINT,
-        consensus_peers BIGINT
-      );
-    `;
-
-    const addLastCheckinColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'last_checkin'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN last_checkin TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-        END IF; 
-      END $$;
-    `;
-
-    const addIpAddressColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'ip_address'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN ip_address VARCHAR(45);
-        END IF; 
-      END $$;
-    `;
-
-    const addExecutionPeersColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'execution_peers'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN execution_peers BIGINT;
-        END IF; 
-      END $$;
-    `;
-
-    const addConsensusPeersColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'consensus_peers'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN consensus_peers BIGINT;
-        END IF; 
-      END $$;
-    `;
-
-    const removePeerCountColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'peer_count'
-        ) THEN 
-          ALTER TABLE node_status 
-          DROP COLUMN peer_count;
-        END IF; 
-      END $$;
-    `;
-
-    const addGitBranchColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'git_branch'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN git_branch VARCHAR(255);
-        END IF; 
-      END $$;
-    `;
-
-    const addLastCommitColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'last_commit'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN last_commit VARCHAR(40);
-        END IF; 
-      END $$;
-    `;
-
-    const addCommitHashColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'commit_hash'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN commit_hash VARCHAR(40);
-        END IF; 
-      END $$;
-    `;
-
-    const addEnodeColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'enode'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN enode VARCHAR(255);
-        END IF; 
-      END $$;
-    `;
-
-    const addPeerIDColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'peerid'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN peerID VARCHAR(255);
-        END IF; 
-      END $$;
-    `;
-
-    const addConsensusTcpPortColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'consensus_tcp_port'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN consensus_tcp_port INTEGER;
-        END IF; 
-      END $$;
-    `;
-
-    const addConsensusUdpPortColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'consensus_udp_port'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN consensus_udp_port INTEGER;
-        END IF; 
-      END $$;
-    `;
-
-    const addMultiAddrColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'multi_addr'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN multi_addr TEXT;
-        END IF; 
-      END $$;
-    `;
-
-    const removeMultiAddrColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'multi_addr'
-        ) THEN 
-          ALTER TABLE node_status 
-          DROP COLUMN multi_addr;
-        END IF; 
-      END $$;
-    `;
-
-    const addEnrColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'enr'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN enr TEXT;
-        END IF; 
-      END $$;
-    `;
-
-    const addOwnerColumnQuery = `
-      DO $$ 
-      BEGIN 
-        IF NOT EXISTS (
-          SELECT FROM information_schema.columns 
-          WHERE table_name = 'node_status' AND column_name = 'owner'
-        ) THEN 
-          ALTER TABLE node_status 
-          ADD COLUMN owner VARCHAR(255);
-        END IF; 
-      END $$;
-    `;
-
+    pool = await getDbPool();
     client = await pool.connect();
     try {
+      const createTableQuery = `
+        CREATE TABLE IF NOT EXISTS node_status (
+          id VARCHAR(255) PRIMARY KEY,
+          node_version VARCHAR(50),
+          execution_client VARCHAR(100),
+          consensus_client VARCHAR(100),
+          cpu_usage DECIMAL(5,2),
+          memory_usage DECIMAL(5,2),
+          storage_usage DECIMAL(5,2),
+          block_number BIGINT,
+          block_hash VARCHAR(66),
+          last_checkin TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          ip_address VARCHAR(45),
+          execution_peers BIGINT,
+          consensus_peers BIGINT
+        );
+      `;
+
+      const addLastCheckinColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'last_checkin'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN last_checkin TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+          END IF; 
+        END $$;
+      `;
+
+      const addIpAddressColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'ip_address'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN ip_address VARCHAR(45);
+          END IF; 
+        END $$;
+      `;
+
+      const addExecutionPeersColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'execution_peers'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN execution_peers BIGINT;
+          END IF; 
+        END $$;
+      `;
+
+      const addConsensusPeersColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'consensus_peers'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN consensus_peers BIGINT;
+          END IF; 
+        END $$;
+      `;
+
+      const removePeerCountColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'peer_count'
+          ) THEN 
+            ALTER TABLE node_status 
+            DROP COLUMN peer_count;
+          END IF; 
+        END $$;
+      `;
+
+      const addGitBranchColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'git_branch'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN git_branch VARCHAR(255);
+          END IF; 
+        END $$;
+      `;
+
+      const addLastCommitColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'last_commit'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN last_commit VARCHAR(40);
+          END IF; 
+        END $$;
+      `;
+
+      const addCommitHashColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'commit_hash'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN commit_hash VARCHAR(40);
+          END IF; 
+        END $$;
+      `;
+
+      const addEnodeColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'enode'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN enode VARCHAR(255);
+          END IF; 
+        END $$;
+      `;
+
+      const addPeerIDColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'peerid'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN peerID VARCHAR(255);
+          END IF; 
+        END $$;
+      `;
+
+      const addConsensusTcpPortColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'consensus_tcp_port'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN consensus_tcp_port INTEGER;
+          END IF; 
+        END $$;
+      `;
+
+      const addConsensusUdpPortColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'consensus_udp_port'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN consensus_udp_port INTEGER;
+          END IF; 
+        END $$;
+      `;
+
+      const addMultiAddrColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'multi_addr'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN multi_addr TEXT;
+          END IF; 
+        END $$;
+      `;
+
+      const removeMultiAddrColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'multi_addr'
+          ) THEN 
+            ALTER TABLE node_status 
+            DROP COLUMN multi_addr;
+          END IF; 
+        END $$;
+      `;
+
+      const addEnrColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'enr'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN enr TEXT;
+          END IF; 
+        END $$;
+      `;
+
+      const addOwnerColumnQuery = `
+        DO $$ 
+        BEGIN 
+          IF NOT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_name = 'node_status' AND column_name = 'owner'
+          ) THEN 
+            ALTER TABLE node_status 
+            ADD COLUMN owner VARCHAR(255);
+          END IF; 
+        END $$;
+      `;
+
       await client.query(createTableQuery);
       await client.query(addLastCheckinColumnQuery);
       await client.query(addIpAddressColumnQuery);
@@ -467,15 +436,7 @@ async function createTables() {
       await client.query(renameSecSinceIpLocColumnQuery);
       await client.query(removeSecSinceIpLocColumnQuery);
       await client.query(addContinentColumnQuery);
-
-      const checkColumnQuery = `
-        SELECT column_name, data_type, character_maximum_length
-        FROM information_schema.columns
-        WHERE table_name = 'node_status' AND column_name = 'peerid';
-      `;
-
-      const checkColumnResult = await client.query(checkColumnQuery);
-      console.log('Existing peerID column:', checkColumnResult.rows[0]);
+      await client.query(addOwnerColumnQuery);
 
       console.log("Tables created/updated successfully");
     } finally {

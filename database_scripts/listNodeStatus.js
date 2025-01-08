@@ -1,50 +1,13 @@
-const { Pool } = require('pg');
-const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
-const { dbHost } = require('../config');
+const { getDbPool } = require('../utils/dbUtils');
 require('dotenv').config();
 
 async function listNodeStatus() {
   console.log("Listing node_status table...");
 
-  const secret_name = process.env.RDS_SECRET_NAME;
-  if (!secret_name) {
-    console.error("RDS_SECRET_NAME is not set in the environment variables.");
-    return;
-  }
-
-  const secretsClient = new SecretsManagerClient({ 
-    region: "us-east-1",
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
-  });
-
   let pool;
-
   try {
-    console.log("Fetching secret from AWS Secrets Manager...");
-    const response = await secretsClient.send(
-      new GetSecretValueCommand({
-        SecretId: secret_name,
-        VersionStage: "AWSCURRENT",
-      })
-    );
-    const secret = JSON.parse(response.SecretString);
-
     console.log("Creating database connection pool...");
-    const dbConfig = {
-      host: dbHost,
-      user: secret.username,
-      password: secret.password,
-      database: secret.dbname || 'postgres',
-      port: 5432,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    };
-
-    pool = new Pool(dbConfig);
+    pool = await getDbPool();
 
     console.log("Connecting to database...");
     const client = await pool.connect();

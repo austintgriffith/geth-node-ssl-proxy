@@ -1,6 +1,4 @@
-const { Pool } = require('pg');
-const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
-const { dbHost } = require('../config');
+const { getDbPool } = require('../utils/dbUtils');
 require('dotenv').config();
 const readline = require('readline');
 
@@ -26,70 +24,38 @@ async function createRequestHostTable() {
 
   console.log("Proceeding with table creation/reset...");
 
-  const secret_name = process.env.RDS_SECRET_NAME;
-  const client = new SecretsManagerClient({ 
-    region: "us-east-1",
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-    }
-  });
-
   let pool;
-
   try {
-    const response = await client.send(
-      new GetSecretValueCommand({
-        SecretId: secret_name,
-        VersionStage: "AWSCURRENT",
-      })
-    );
-    const secret = JSON.parse(response.SecretString);
-
-    const dbConfig = {
-      host: dbHost,
-      user: secret.username,
-      password: secret.password,
-      database: secret.dbname || 'postgres',
-      port: 5432,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    };
-
-    pool = new Pool(dbConfig);
-
-    const dropTableQuery = `
-      DROP TABLE IF EXISTS request_host;
-    `;
-
-    const createTableQuery = `
-      CREATE TABLE request_host (
-        host VARCHAR(255) PRIMARY KEY,
-        n_requests INTEGER DEFAULT 0
-      );
-    `;
-
+    pool = await getDbPool();
+    const dbClient = await pool.connect();
     try {
-      const dbClient = await pool.connect();
-      try {
-        // Drop the existing table
-        await dbClient.query(dropTableQuery);
-        console.log("Existing request_host table dropped (if it existed)");
+      const dropTableQuery = `
+        DROP TABLE IF EXISTS request_host;
+      `;
 
-        // Create the new table
-        await dbClient.query(createTableQuery);
-        console.log("request_host table created successfully with host and n_requests columns");
-      } finally {
-        dbClient.release();
-      }
-    } catch (err) {
-      console.error('Error recreating request_host table:', err);
+      const createTableQuery = `
+        CREATE TABLE request_host (
+          host VARCHAR(255) PRIMARY KEY,
+          n_requests INTEGER DEFAULT 0
+        );
+      `;
+
+      // Drop the existing table
+      await dbClient.query(dropTableQuery);
+      console.log("Existing request_host table dropped (if it existed)");
+
+      // Create the new table
+      await dbClient.query(createTableQuery);
+      console.log("request_host table created successfully with host and n_requests columns");
     } finally {
-      await pool.end();
+      dbClient.release();
     }
   } catch (err) {
-    console.error('Error creating request_host table:', err);
+    console.error('Error recreating request_host table:', err);
+  } finally {
+    if (pool) {
+      await pool.end();
+    }
   }
 }
 
