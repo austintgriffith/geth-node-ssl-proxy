@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { fallbackUrl } = require('../config');
 
 const processMessageChecks = (pendingMessageChecks) => {
   // Get all message IDs from the map
@@ -15,7 +16,15 @@ const processMessageChecks = (pendingMessageChecks) => {
     const checkMessage = pendingMessageChecks.get(checkMessageId);
     const mainMessage = pendingMessageChecks.get(mainMessageId);
     
-    // Only process if we have both messages
+    // Skip if either message involves the fallback URL
+    if (checkMessage?.peerId === fallbackUrl || mainMessage?.peerId === fallbackUrl) {
+      // Clean up these messages without logging
+      pendingMessageChecks.delete(checkMessageId);
+      pendingMessageChecks.delete(mainMessageId);
+      continue;
+    }
+    
+    // Only process if we have both messages and neither involves fallback
     if (checkMessage && mainMessage) {
       // Compare response hashes
       const responsesMatch = checkMessage.responseHash === mainMessage.responseHash;

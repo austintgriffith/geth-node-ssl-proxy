@@ -19,6 +19,12 @@ async function handleFallbackRequest(req, res, requestStartTimes, pendingMessage
     req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
     logRpcRequest(req, messageId, requestStartTimes, true, result, null);
     
+    // Explicitly ensure no check message is created for fallback requests
+    if (pendingMessageChecks) {
+      pendingMessageChecks.delete(messageId);
+      pendingMessageChecks.delete(messageId + '_');  // Also remove any existing check message
+    }
+    
     res.json(result);
   } catch (error) {
     const clientIp = req.ip || req.connection.remoteAddress;
@@ -26,6 +32,12 @@ async function handleFallbackRequest(req, res, requestStartTimes, pendingMessage
     
     req.handlingClient = null;
     logRpcRequest(req, messageId, requestStartTimes, false, null, null);
+    
+    // Also ensure no check message in error case
+    if (pendingMessageChecks) {
+      pendingMessageChecks.delete(messageId);
+      pendingMessageChecks.delete(messageId + '_');
+    }
     
     res.status(500).json({
       jsonrpc: "2.0",
