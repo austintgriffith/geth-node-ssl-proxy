@@ -1,6 +1,203 @@
 const fs = require('fs');
 const { fallbackUrl } = require('../config');
 
+const truncateValue = (value, maxLength = 100) => {
+  const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
+  if (stringValue.length <= maxLength) {
+    return stringValue;
+  }
+  return stringValue.substring(0, maxLength) + '...';
+};
+
+const logDebug = (message, ...args) => {
+  const timestamp = new Date().toISOString();
+  // Modify args to truncate long values
+  const truncatedArgs = args.map(arg => {
+    if (typeof arg === 'object') {
+      const truncatedObj = {};
+      for (const [key, value] of Object.entries(arg)) {
+        truncatedObj[key] = truncateValue(value);
+      }
+      return truncatedObj;
+    }
+    return truncateValue(arg);
+  });
+  
+  const logMessage = `${timestamp} - ${message} ${truncatedArgs.map(arg => JSON.stringify(arg)).join(' ')}\n`;
+  try {
+    // Create file if it doesn't exist
+    if (!fs.existsSync('rpcMessageChecksDebug.log')) {
+      fs.writeFileSync('rpcMessageChecksDebug.log', '');
+    }
+    fs.appendFileSync('rpcMessageChecksDebug.log', logMessage);
+  } catch (error) {
+    console.error('Error writing to debug log:', error);
+  }
+};
+
+const compareResponses = (response1, response2, messageId) => {
+  // Fields that are optional (added in network upgrades)
+  const optionalFields = [
+    'baseFeePerGas',    // Added in London
+    'withdrawalsRoot',   // Added in Shanghai
+    'withdrawals',      // Added in Shanghai
+    'blobGasUsed',      // Added in Cancun
+    'excessBlobGas',    // Added in Cancun
+    'parentBeaconBlockRoot',  // Added in Cancun
+    'totalDifficulty'   // Optional post-merge
+  ];
+
+  const sortObject = (obj) => {
+    if (Array.isArray(obj)) {
+      return obj.map(sortObject).sort();
+    }
+    if (obj && typeof obj === 'object') {
+      const sortedObj = {};
+      Object.keys(obj).sort().forEach(key => {
+        // Skip optional fields entirely
+        if (!optionalFields.includes(key)) {
+          sortedObj[key] = sortObject(obj[key]);
+        }
+      });
+      return sortedObj;
+    }
+    return obj;
+  };
+
+  const findDifferences = (obj1, obj2, path = '') => {
+    const differences = [];
+    const allKeys = new Set([...Object.keys(obj1), ...Object.keys(obj2)]);
+    
+    for (const key of allKeys) {
+      const currentPath = path ? `${path}.${key}` : key;
+      
+      // Skip optional fields
+      if (optionalFields.includes(key)) continue;
+      
+      if (typeof obj1[key] === 'object' && typeof obj2[key] === 'object') {
+        differences.push(...findDifferences(obj1[key], obj2[key], currentPath));
+      } else if (obj1[key] !== obj2[key]) {
+        differences.push({
+          path: currentPath,
+          value1: obj1[key],
+          value2: obj2[key]
+        });
+      }
+    }
+    return differences;
+  };
+
+  // Special case for hex strings (like "0x0")
+  if (typeof response1 === 'string' && 
+      typeof response2 === 'string' && 
+      response1.startsWith('0x') && 
+      response2.startsWith('0x')) {
+    const matches = response1.toLowerCase() === response2.toLowerCase();
+    if (!matches) {
+      logDebug(`Starting comparison for message ${messageId}:`, {
+        response1Type: typeof response1,
+        response2Type: typeof response2,
+        response1Length: response1?.length,
+        response2Length: response2?.length,
+        response1Value: response1,
+        response2Value: response2
+      });
+      logDebug(`Hex string mismatch for ${messageId}:`, {
+        value1: response1,
+        value2: response2
+      });
+    }
+    return matches;
+  }
+
+  try {
+    const shouldParseJson = (str) => {
+      return typeof str === 'string' && 
+             (str.startsWith('{') || str.startsWith('['));
+    };
+
+    // Handle numeric responses (including hex)
+    const parseNumericResponse = (response) => {
+      if (typeof response === 'string') {
+        if (response.startsWith('0x')) {
+          return BigInt(response).toString();
+        }
+        // Check if it's a numeric string
+        const num = Number(response);
+        if (!isNaN(num)) {
+          return num.toString();
+        }
+      }
+      return response;
+    };
+
+    // First try to parse as JSON if it looks like JSON
+    const obj1 = shouldParseJson(response1) ? JSON.parse(response1) : parseNumericResponse(response1);
+    const obj2 = shouldParseJson(response2) ? JSON.parse(response2) : parseNumericResponse(response2);
+    
+    if (typeof obj1 === 'object' && typeof obj2 === 'object') {
+      const sortedObj1 = sortObject(obj1);
+      const sortedObj2 = sortObject(obj2);
+
+      const matches = JSON.stringify(sortedObj1) === JSON.stringify(sortedObj2);
+      if (!matches) {
+        // Log the initial comparison info
+        logDebug(`Starting comparison for message ${messageId}:`, {
+          response1Type: typeof response1,
+          response2Type: typeof response2,
+          response1Length: response1?.length,
+          response2Length: response2?.length
+        });
+
+        // Find and log specific differences
+        const differences = findDifferences(sortedObj1, sortedObj2);
+        logDebug(`Detailed differences for ${messageId}:`, differences);
+
+        // Still log the full objects for reference
+        logDebug(`Full object mismatch for ${messageId}:`, {
+          sortedObj1,
+          sortedObj2
+        });
+      }
+      return matches;
+    }
+    
+    // For non-objects, do direct comparison
+    const matches = obj1 === obj2;
+    if (!matches) {
+      logDebug(`Starting comparison for message ${messageId}:`, {
+        response1Type: typeof response1,
+        response2Type: typeof response2,
+        response1Length: response1?.length,
+        response2Length: response2?.length,
+        response1Value: response1,
+        response2Value: response2
+      });
+      logDebug(`Direct value mismatch for ${messageId}:`, {
+        value1: obj1,
+        value2: obj2
+      });
+    }
+    return matches;
+  } catch (error) {
+    // If JSON parsing fails, log the error and inputs
+    logDebug(`Starting comparison for message ${messageId}:`, {
+      response1Type: typeof response1,
+      response2Type: typeof response2,
+      response1Length: response1?.length,
+      response2Length: response2?.length,
+      response1Value: response1,
+      response2Value: response2
+    });
+    logDebug(`JSON parse error for ${messageId}:`, {
+      error: error.message,
+      response1,
+      response2
+    });
+    return response1 === response2;
+  }
+};
+
 const processMessageChecks = (pendingMessageChecks) => {
   // Get all message IDs from the map
   const messageIds = Array.from(pendingMessageChecks.keys());
@@ -26,8 +223,12 @@ const processMessageChecks = (pendingMessageChecks) => {
     
     // Only process if we have both messages and neither involves fallback
     if (checkMessage && mainMessage) {
-      // Compare response hashes
-      const responsesMatch = checkMessage.responseHash === mainMessage.responseHash;
+      // Compare responses using the new comparison function
+      const responsesMatch = compareResponses(
+        checkMessage.responseHash, 
+        mainMessage.responseHash,
+        mainMessageId
+      );
       
       // Log the comparison result to file
       const logMessage = `${mainMessageId}|${mainMessage.peerId}|${checkMessage.peerId}|${responsesMatch}\n`;

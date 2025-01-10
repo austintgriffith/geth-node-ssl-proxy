@@ -17,6 +17,8 @@ const methodsAcceptingBlockNumber = [
   'eth_getProof'
 ];
 
+const BLOCK_TAGS = ['latest', 'pending', 'earliest'];
+
 function sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, isCheck = false, openMessagesCheck = null, requestStartTimesCheck = null, originalMessageId = null, pendingMessageChecks = null, largestBlockNumber = null) {
   try {
     const clientIp = req.ip || req.connection.remoteAddress;
@@ -83,10 +85,14 @@ function sendRpcRequestToClient(req, res, randomClient, openMessages, requestSta
               ];
             }
           } else {
-            // For array params, check if last param is a block number (hex string)
+            // For array params, check if last param is a block tag or number
             const lastParam = req.body.params[req.body.params.length - 1];
-            if (!(typeof lastParam === 'string' && lastParam.startsWith('0x'))) {
-              // Only append block number if one isn't already present
+            if (typeof lastParam === 'string' && 
+                (lastParam.startsWith('0x') || BLOCK_TAGS.includes(lastParam))) {
+              // Keep existing block parameter
+              checkModifiedMessage.params = [...req.body.params];
+            } else {
+              // Add block number if no block parameter exists
               checkModifiedMessage.params = [...req.body.params, blockNumberHex];
             }
           }
