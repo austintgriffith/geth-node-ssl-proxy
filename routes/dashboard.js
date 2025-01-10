@@ -318,7 +318,7 @@ router.get('/dashboard', (req, res) => {
                   <th>Params</th>
                   <th>Duration (ms)</th>
                   <th>Message ID</th>
-                  <th>Result Hash</th>
+                  <th>Result</th>
                 </tr>
               </thead>
               <tbody>
@@ -696,7 +696,7 @@ router.get('/dashboard', (req, res) => {
                       <th>Params</th>
                       <th>Duration (ms)</th>
                       <th>Message ID</th>
-                      <th>Result Hash</th>
+                      <th>Result</th>
                     </tr>
                   </thead>
                   <tbody>
