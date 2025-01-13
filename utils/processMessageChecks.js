@@ -197,6 +197,7 @@ const compareResponses = (response1, response2, messageId) => {
 };
 
 const processMessageChecks = (pendingMessageChecks) => {
+  console.log('🚛  🚛  🚛  🚛  🚛')
   console.log('processMessageChecks running...');
   console.log('Current pendingMessageChecks size:', pendingMessageChecks.size);
   
@@ -213,7 +214,7 @@ const processMessageChecks = (pendingMessageChecks) => {
     console.log(`Processing check message: ${checkMessageId}, main message: ${mainMessageId}`);
     
     // Get all related messages
-    const checkMessage = pendingMessageChecks.get(checkMessageId);
+    const checkMessage = pendingMessageChecks.get(mainMessageId + '_');
     const mainMessage = pendingMessageChecks.get(mainMessageId);
     const checkMessageB = pendingMessageChecks.get(mainMessageId + '!');
     

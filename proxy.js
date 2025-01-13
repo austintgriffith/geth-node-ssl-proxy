@@ -156,8 +156,24 @@ app.post("/", validateRpcRequest, async (req, res) => {
         // Send to second client
         sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId, pendingMessageChecks, largestBlockNumber);
 
-        // Send to third client
-        sendRpcRequestToClient(req, res, randomClientCheckB, openMessagesCheckB, requestStartTimesCheckB, wsMessageTimeout, true, openMessagesCheckB, requestStartTimesCheckB, originalMessageId, pendingMessageChecks, largestBlockNumber, true);
+        // Send to third client (Check B)
+        sendRpcRequestToClient(
+          req, 
+          res, 
+          randomClientCheckB, 
+          openMessagesCheckB,
+          requestStartTimesCheckB,
+          wsMessageTimeout, 
+          false,
+          openMessagesCheck,
+          requestStartTimesCheck,
+          originalMessageId, 
+          pendingMessageChecks, 
+          largestBlockNumber,
+          true,
+          openMessagesCheckB,
+          requestStartTimesCheckB
+        );
       }
     } else {
       handleFallbackRequest(req, res, requestStartTimes, null);

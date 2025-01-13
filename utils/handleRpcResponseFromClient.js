@@ -6,8 +6,23 @@ const { incrementOwnerPoints } = require('../database_scripts/incrementOwnerPoin
 
 async function handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck = null, requestStartTimesCheck = null, openMessagesCheckB = null, requestStartTimesCheckB = null, pendingMessageChecks = null) {
   const messageId = parsedMessage.bgMessageId;
-  console.log('Received message:', parsedMessage);
+  console.log('Received message:', messageId);
   
+  // Get client info first
+  const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
+  const handlingClient = Array.from(filteredConnectedClients.values())
+    .find(c => c.clientID === client.clientID);
+
+  if (!handlingClient) {
+    console.error(`No handling client found for clientID: ${client.clientID}`);
+    return;
+  }
+
+  // Add debug logging for check B messages
+  if (openMessagesCheckB && openMessagesCheckB.has(messageId)) {
+    console.log('Found check B message in openMessagesCheckB:', messageId);
+  }
+
   if (messageId && openMessages.has(messageId)) {
     console.log(`📲 Found matching open message with id ${messageId}. Sending response.`);
     const openMessage = openMessages.get(messageId);
@@ -23,9 +38,6 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
       openMessages.delete(messageId);
 
       // Add client info to the request object
-      const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
-      const handlingClient = Array.from(filteredConnectedClients.values())
-        .find(c => c.clientID === client.clientID);
       openMessage.req.handlingClient = handlingClient;
 
       // Log the RPC request with timing information
@@ -45,9 +57,6 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
     const openMessage = openMessagesCheck.get(messageId);
     
     // Add client info to the request object for check messages
-    const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
-    const handlingClient = Array.from(filteredConnectedClients.values())
-      .find(c => c.clientID === client.clientID);
     openMessage.req.handlingClient = handlingClient;
     
     logRpcRequest(openMessage.req, messageId, requestStartTimesCheck || requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
@@ -56,18 +65,12 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
     console.log(`Logging response for check message B with id ${messageId}`);
     const openMessage = openMessagesCheckB.get(messageId);
     
-    const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
-    const handlingClient = Array.from(filteredConnectedClients.values())
-      .find(c => c.clientID === client.clientID);
     openMessage.req.handlingClient = handlingClient;
     
-    // Strip any existing suffix before adding '!'
-    const baseMessageId = messageId.endsWith('_') ? messageId.slice(0, -1) : messageId;
+    // Important: Don't modify the messageId, use it as is
+    console.log('Check B message ID before logging:', messageId);
     
-    // Add debug log to see the messageId being passed
-    console.log('Check B message ID before logging:', baseMessageId + '!');
-    
-    logRpcRequest(openMessage.req, baseMessageId + '!', requestStartTimesCheckB || requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
+    logRpcRequest(openMessage.req, messageId, requestStartTimesCheckB || requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
     openMessagesCheckB.delete(messageId);
   } else {
     console.log(`No open message found for id ${messageId}. This might be a delayed response.`);
