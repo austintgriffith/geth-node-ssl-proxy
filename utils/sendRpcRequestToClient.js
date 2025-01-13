@@ -13,7 +13,7 @@ const methodsAcceptingBlockNumber = [
   'eth_getUncleCountByBlockNumber',
   // 'eth_getUncleByBlockNumberAndIndex',
   // 'eth_getTransactionByBlockNumberAndIndex',
-  'eth_getProof'
+  // 'eth_getProof'
 ];
 
 const BLOCK_TAGS = ['latest', 'pending', 'earliest'];
