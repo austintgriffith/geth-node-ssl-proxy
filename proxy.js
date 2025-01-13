@@ -154,9 +154,19 @@ app.post("/", validateRpcRequest, async (req, res) => {
       // Only send check requests if we have all three clients
       if (randomClientCheck && randomClientCheckB) {
         // Send to second client
+        console.log('Sending check request (_):', {
+          messageId: originalMessageId + '_',
+          client: randomClientCheck.clientID,
+          isCheck: true
+        });
         sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId, pendingMessageChecks, largestBlockNumber);
 
         // Send to third client (Check B)
+        console.log('Sending check request (!):', {
+          messageId: originalMessageId + '!',
+          client: randomClientCheckB.clientID,
+          isCheck: false
+        });
         sendRpcRequestToClient(
           req, 
           res, 

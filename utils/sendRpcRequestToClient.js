@@ -59,16 +59,20 @@ function sendRpcRequestToClient(req, res, randomClient, openMessages, requestSta
     setTimeout(() => {
       if (openMessages.has(messageId)) {
         console.log('Timeout reached for message:', messageId);
-        const { res, rpcId } = openMessages.get(messageId);
-        res.status(504).json({
-          jsonrpc: "2.0",
-          id: rpcId,
-          error: {
-            code: -32603,
-            message: "Gateway Timeout",
-            data: "No response received from the node"
-          }
-        });
+        const message = openMessages.get(messageId);
+        
+        // Only send error response if we have a res object (main request)
+        if (message.res) {
+          message.res.status(504).json({
+            jsonrpc: "2.0",
+            id: message.rpcId,
+            error: {
+              code: -32603,
+              message: "Gateway Timeout",
+              data: "No response received from the node"
+            }
+          });
+        }
         openMessages.delete(messageId);
       }
     }, wsMessageTimeout);
