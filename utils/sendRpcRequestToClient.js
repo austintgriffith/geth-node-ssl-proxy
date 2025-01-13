@@ -13,17 +13,27 @@ const methodsAcceptingBlockNumber = [
   'eth_getUncleCountByBlockNumber',
   // 'eth_getUncleByBlockNumberAndIndex',
   // 'eth_getTransactionByBlockNumberAndIndex',
-  // 'eth_getProof'
+  'eth_getProof'
 ];
 
 const BLOCK_TAGS = ['latest', 'pending', 'earliest'];
 
-function sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, isCheck = false, openMessagesCheck = null, requestStartTimesCheck = null, originalMessageId = null, pendingMessageChecks = null, largestBlockNumber = null) {
+function sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, isCheck = false, openMessagesCheck = null, requestStartTimesCheck = null, originalMessageId = null, pendingMessageChecks = null, largestBlockNumber = null, isCheckB = false, openMessagesCheckB = null, requestStartTimesCheckB = null) {
   try {
     const clientIp = req.ip || req.connection.remoteAddress;
-    const messageId = isCheck ? originalMessageId + '_' : generateMessageId(req.body, clientIp);
+    const messageId = isCheck ? originalMessageId + '_' : 
+                     isCheckB ? originalMessageId + '!' :
+                     generateMessageId(req.body, clientIp);
 
-    if (!isCheck) {
+    console.log(`Sending request to client. isCheck: ${isCheck}, isCheckB: ${isCheckB}, messageId: ${messageId}`);
+
+    // Only proceed with check messages if method accepts block number
+    if ((isCheck || isCheckB) && !methodsAcceptingBlockNumber.includes(req.body.method)) {
+      console.log(`Skipping check for method ${req.body.method} - does not accept block number`);
+      return;
+    }
+
+    if (!isCheck && !isCheckB) {
       console.log('➕ Adding new open message with id:', messageId);
       openMessages.set(messageId, { req, res, timestamp: Date.now(), rpcId: req.body.id });
       requestStartTimes.set(messageId, performance.now());
@@ -51,13 +61,16 @@ function sendRpcRequestToClient(req, res, randomClient, openMessages, requestSta
           openMessages.delete(messageId);
         }
       }, wsMessageTimeout);
-    } else if (methodsAcceptingBlockNumber.includes(req.body.method)) {
-      if (!openMessagesCheck || !requestStartTimesCheck) {
-        throw new Error('Check messages require openMessagesCheck and requestStartTimesCheck parameters');
+    } else {
+      const targetOpenMessages = isCheck ? openMessagesCheck : openMessagesCheckB;
+      const targetRequestStartTimes = isCheck ? requestStartTimesCheck : requestStartTimesCheckB;
+
+      if (!targetOpenMessages || !targetRequestStartTimes) {
+        throw new Error('Check messages require corresponding openMessages and requestStartTimes parameters');
       }
-      // For check messages, don't include the res object
-      openMessagesCheck.set(messageId, { req, timestamp: Date.now(), rpcId: req.body.id });
-      requestStartTimesCheck.set(messageId, performance.now());
+
+      targetOpenMessages.set(messageId, { req, timestamp: Date.now(), rpcId: req.body.id });
+      targetRequestStartTimes.set(messageId, performance.now());
 
       // Convert largestBlockNumber to hex and ensure it has '0x' prefix
       const blockNumberHex = largestBlockNumber ? '0x' + largestBlockNumber.toString(16) : null;
@@ -68,39 +81,35 @@ function sendRpcRequestToClient(req, res, randomClient, openMessages, requestSta
         bgMessageId: messageId
       };
       
-      // Only modify params if the method accepts block number
-      if (methodsAcceptingBlockNumber.includes(req.body.method)) {
-        const blockNumberHex = largestBlockNumber ? '0x' + largestBlockNumber.toString(16) : null;
-        
-        // Handle different parameter structures
-        if (req.body.params && req.body.params.length > 0) {
-          const firstParam = req.body.params[0];
-          if (typeof firstParam === 'object' && firstParam !== null) {
-            // If first param is an object, only add blockNumber if it doesn't exist
-            if (!firstParam.hasOwnProperty('blockNumber')) {
-              checkModifiedMessage.params = [
-                { ...firstParam, blockNumber: blockNumberHex },
-                ...req.body.params.slice(1)
-              ];
-            }
-          } else {
-            // For array params, check if last param is a block tag or number
-            const lastParam = req.body.params[req.body.params.length - 1];
-            if (typeof lastParam === 'string' && 
-                (lastParam.startsWith('0x') || BLOCK_TAGS.includes(lastParam))) {
-              // Keep existing block parameter
-              checkModifiedMessage.params = [...req.body.params];
-            } else {
-              // Add block number if no block parameter exists
-              checkModifiedMessage.params = [...req.body.params, blockNumberHex];
-            }
+      // Handle different parameter structures for block number
+      if (req.body.params && req.body.params.length > 0) {
+        const firstParam = req.body.params[0];
+        if (typeof firstParam === 'object' && firstParam !== null) {
+          // If first param is an object, only add blockNumber if it doesn't exist
+          if (!firstParam.hasOwnProperty('blockNumber')) {
+            checkModifiedMessage.params = [
+              { ...firstParam, blockNumber: blockNumberHex },
+              ...req.body.params.slice(1)
+            ];
           }
         } else {
-          // No parameters provided, add block number
-          checkModifiedMessage.params = [blockNumberHex];
+          // For array params, check if last param is a block tag or number
+          const lastParam = req.body.params[req.body.params.length - 1];
+          if (typeof lastParam === 'string' && 
+              (lastParam.startsWith('0x') || BLOCK_TAGS.includes(lastParam))) {
+            // Keep existing block parameter
+            checkModifiedMessage.params = [...req.body.params];
+          } else {
+            // Add block number if no block parameter exists
+            checkModifiedMessage.params = [...req.body.params, blockNumberHex];
+          }
         }
+      } else {
+        // No parameters provided, add block number
+        checkModifiedMessage.params = [blockNumberHex];
       }
       
+      console.log(`Sending check message to client: ${messageId}`);
       randomClient.ws.send(JSON.stringify(checkModifiedMessage));
     }
   } catch (error) {

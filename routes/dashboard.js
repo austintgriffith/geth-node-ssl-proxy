@@ -26,8 +26,14 @@ router.get('/dashboard', (req, res) => {
         if (err) reject(err);
         else resolve(data);
       });
+    }),
+    new Promise((resolve, reject) => {
+      fs.readFile(path.join(__dirname, '../rpcRequestsCheckB.log'), 'utf8', (err, data) => {
+        if (err) reject(err);
+        else resolve(data);
+      });
     })
-  ]).then(async ([mainLogData, checkLogData, messageChecksData]) => {
+  ]).then(async ([mainLogData, checkLogData, messageChecksData, checkBLogData]) => {
     try {
       const pool = await getDbPool();
       const client = await pool.connect();
@@ -426,24 +432,36 @@ router.get('/dashboard', (req, res) => {
           </script>
         `;
 
-        // Process message checks log entries
-        const messageChecksEntries = messageChecksData.trim().split('\n').map(line => {
-          const [messageId, mainPeerId, checkPeerId, matchResult] = line.split('|');
-          return {
-            messageId,
-            mainPeerId,
-            checkPeerId,
-            matchResult: matchResult === 'true'
-          };
-        });
+        // Add this function before the messageChecksHtml definition
+        function parseMessageChecksLog() {
+          try {
+            const logContent = fs.readFileSync('rpcMessageChecks.log', 'utf8');
+            return logContent.trim().split('\n')
+              .map(line => {
+                const [messageId, mainPeerId, checkPeerId, checkPeerIdB, matchResult] = line.split('|');
+                return {
+                  messageId,
+                  mainPeerId,
+                  checkPeerId,
+                  checkPeerIdB,
+                  matchResult: matchResult === 'true'
+                };
+              })
+              .reverse(); // Reverse the array to show latest entries first
+          } catch (error) {
+            console.error('Error reading message checks log:', error);
+            return [];
+          }
+        }
 
+        // Update the messageChecksHtml variable to use the parsed data
         const messageChecksHtml = `
           <div class="chart-container">
-            <h2 class="tableHeader">Message Checks Log</h2>
+            <h2 class="tableHeader">Message Checks</h2>
             <div style="margin-bottom: 10px;">
               <button onclick="filterMessageChecksByMatch(null)" class="filter-btn active">All</button>
               <button onclick="filterMessageChecksByMatch(true)" class="filter-btn">Matching</button>
-              <button onclick="filterMessageChecksByMatch(false)" class="filter-btn">Non-Matching</button>
+              <button onclick="filterMessageChecksByMatch(false)" class="filter-btn">Non-matching</button>
             </div>
             <input 
               type="text" 
@@ -457,11 +475,23 @@ router.get('/dashboard', (req, res) => {
                   <th>Message ID</th>
                   <th>Main Peer ID</th>
                   <th>Check Peer ID</th>
-                  <th>Results Match?</th>
+                  <th>Check Peer ID B</th>
+                  <th>Match Result</th>
                 </tr>
               </thead>
               <tbody>
-                <!-- Message check entries will be inserted here by JavaScript -->
+                ${parseMessageChecksLog().map(entry => `
+                  <tr style="background-color: ${entry.matchResult ? 'transparent' : '#ffe6e6'}" 
+                      onclick="highlightRelatedRows('${entry.messageId}')" 
+                      class="clickable-row" 
+                      data-message-id="${entry.messageId}">
+                    <td>${entry.messageId || ''}</td>
+                    <td>${entry.mainPeerId || ''}</td>
+                    <td>${entry.checkPeerId || ''}</td>
+                    <td>${entry.checkPeerIdB || ''}</td>
+                    <td>${entry.matchResult.toString()}</td>
+                  </tr>
+                `).join('')}
               </tbody>
             </table>
             <div id="messageChecksPagination">
@@ -470,94 +500,154 @@ router.get('/dashboard', (req, res) => {
               <button onclick="nextMessageChecksPage()">Next</button>
             </div>
           </div>
+        `;
+
+        // Process checkB log entries
+        const checkBLogEntries = checkBLogData.trim().split('\n').map(line => {
+          const [utcTimestamp, epochTime, reqHost, peerId, method, params, duration, messageId, success, resultHash] = line.split('|');
+          return { 
+            utcTimestamp, 
+            epochTime, 
+            reqHost, 
+            peerId, 
+            method, 
+            params, 
+            duration: parseFloat(duration),
+            messageId,
+            success: success === 'true',
+            resultHash
+          };
+        });
+
+        const checkBHtml = `
+          <div class="chart-container">
+            <h2 class="tableHeader">Check B RPC Requests Log</h2>
+            <div style="margin-bottom: 10px;">
+              <button onclick="filterCheckBBySuccess(null)" class="filter-btn active">All</button>
+              <button onclick="filterCheckBBySuccess(true)" class="filter-btn">Successful</button>
+              <button onclick="filterCheckBBySuccess(false)" class="filter-btn">Failed</button>
+            </div>
+            <input 
+              type="text" 
+              id="checkBSearchBox" 
+              placeholder="Search check B logs..." 
+              style="width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box;"
+            >
+            <table id="checkBLogTable" border="1" cellpadding="5">
+              <thead>
+                <tr>
+                  <th>UTC Timestamp</th>
+                  <th>Request Host</th>
+                  <th>Peer ID</th>
+                  <th>Method</th>
+                  <th>Params</th>
+                  <th>Duration (ms)</th>
+                  <th>Message ID</th>
+                  <th>Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Check B log entries will be inserted here by JavaScript -->
+              </tbody>
+            </table>
+            <div id="checkBPagination">
+              <button onclick="prevCheckBPage()">Previous</button>
+              <span id="checkBPageInfo"></span>
+              <button onclick="nextCheckBPage()">Next</button>
+            </div>
+          </div>
 
           <script>
-            // Initialize variables for message checks table
-            const messageChecksEntries = ${JSON.stringify(messageChecksEntries)};
-            let filteredMessageChecksEntries = [...messageChecksEntries];
-            let messageChecksMatchFilter = null;
-            const messageChecksEntriesPerPage = 30;
-            let currentMessageChecksPage = 1;
+            // Initialize variables for check B log table
+            const checkBLogEntries = ${JSON.stringify(checkBLogEntries)};
+            let filteredCheckBEntries = [...checkBLogEntries];
+            let checkBSuccessFilter = null;
+            const checkBEntriesPerPage = 30;
+            let currentCheckBPage = 1;
 
-            function filterMessageChecksByMatch(matchResult) {
-              messageChecksMatchFilter = matchResult;
-              currentMessageChecksPage = 1;
+            function filterCheckBBySuccess(success) {
+              checkBSuccessFilter = success;
+              currentCheckBPage = 1;
               
-              // Update button styles - Using string concatenation instead of nested template literals
-              document.querySelectorAll('.chart-container:has(#messageChecksTable) .filter-btn').forEach(btn => btn.classList.remove('active'));
-              document.querySelector('.chart-container:has(#messageChecksTable) button[onclick="filterMessageChecksByMatch(' + (matchResult === null ? 'null' : matchResult) + ')"]').classList.add('active');
+              // Update button styles
+              document.querySelectorAll('#checkBLogTable ~ div .filter-btn').forEach(btn => btn.classList.remove('active'));
+              document.querySelector(\`#checkBLogTable ~ div button[onclick="filterCheckBBySuccess(\${success === null ? 'null' : success})"]\`).classList.add('active');
               
-              applyMessageChecksFilters();
+              applyCheckBFilters();
             }
 
-            function applyMessageChecksFilters() {
-              const searchTerm = document.getElementById('messageChecksSearchBox').value.toLowerCase();
+            function applyCheckBFilters() {
+              const searchTerm = document.getElementById('checkBSearchBox').value.toLowerCase();
               
-              filteredMessageChecksEntries = messageChecksEntries.filter(entry => {
+              filteredCheckBEntries = checkBLogEntries.filter(entry => {
                 const matchesSearch = 
-                  entry.messageId.toLowerCase().includes(searchTerm) ||
-                  entry.mainPeerId.toLowerCase().includes(searchTerm) ||
-                  entry.checkPeerId.toLowerCase().includes(searchTerm);
+                  entry.utcTimestamp.toLowerCase().includes(searchTerm) ||
+                  entry.reqHost.toLowerCase().includes(searchTerm) ||
+                  entry.peerId.toLowerCase().includes(searchTerm) ||
+                  entry.method.toLowerCase().includes(searchTerm) ||
+                  entry.params.toLowerCase().includes(searchTerm) ||
+                  entry.messageId.toLowerCase().includes(searchTerm);
                   
-                const matchesResult = messageChecksMatchFilter === null || entry.matchResult === messageChecksMatchFilter;
+                const matchesSuccess = checkBSuccessFilter === null || entry.success === checkBSuccessFilter;
                 
-                return matchesSearch && matchesResult;
+                return matchesSearch && matchesSuccess;
               });
               
-              renderMessageChecksTable();
+              renderCheckBTable();
             }
 
-            function renderMessageChecksTable() {
-              const start = (currentMessageChecksPage - 1) * messageChecksEntriesPerPage;
-              const end = start + messageChecksEntriesPerPage;
-              const currentEntries = [...filteredMessageChecksEntries]
+            function renderCheckBTable() {
+              const start = (currentCheckBPage - 1) * checkBEntriesPerPage;
+              const end = start + checkBEntriesPerPage;
+              const currentEntries = [...filteredCheckBEntries]
                 .reverse()
                 .slice(start, end);
 
-              const tbody = document.querySelector('#messageChecksTable tbody');
+              const tbody = document.querySelector('#checkBLogTable tbody');
               tbody.innerHTML = currentEntries.map(entry => \`
-                  <tr style="background-color: \${entry.matchResult ? 'transparent' : '#ffe6e6'}" 
-                      onclick="highlightRelatedRows('\${entry.messageId}')" 
-                      class="clickable-row" 
-                      data-message-id="\${entry.messageId}">
+                  <tr style="background-color: \${entry.success ? 'transparent' : '#ffe6e6'}">
+                    <td>\${entry.utcTimestamp || ''}</td>
+                    <td>\${entry.reqHost || ''}</td>
+                    <td>\${entry.peerId || ''}</td>
+                    <td>\${entry.method || ''}</td>
+                    <td>\${entry.params || ''}</td>
+                    <td>\${typeof entry.duration === 'number' ? entry.duration.toFixed(3) : ''}</td>
                     <td>\${entry.messageId || ''}</td>
-                    <td>\${entry.mainPeerId || ''}</td>
-                    <td>\${entry.checkPeerId || ''}</td>
-                    <td>\${entry.matchResult.toString()}</td>
+                    <td>\${entry.resultHash || ''}</td>
                   </tr>
               \`).join('');
 
-              document.getElementById('messageChecksPageInfo').textContent = 
-                \`Page \${currentMessageChecksPage} of \${Math.ceil(filteredMessageChecksEntries.length / messageChecksEntriesPerPage)}\`;
+              document.getElementById('checkBPageInfo').textContent = 
+                \`Page \${currentCheckBPage} of \${Math.ceil(filteredCheckBEntries.length / checkBEntriesPerPage)}\`;
             }
 
-            function prevMessageChecksPage() {
-              if (currentMessageChecksPage > 1) {
-                currentMessageChecksPage--;
-                renderMessageChecksTable();
+            function prevCheckBPage() {
+              if (currentCheckBPage > 1) {
+                currentCheckBPage--;
+                renderCheckBTable();
               }
             }
 
-            function nextMessageChecksPage() {
-              const maxPage = Math.ceil(filteredMessageChecksEntries.length / messageChecksEntriesPerPage);
-              if (currentMessageChecksPage < maxPage) {
-                currentMessageChecksPage++;
-                renderMessageChecksTable();
+            function nextCheckBPage() {
+              const maxPage = Math.ceil(filteredCheckBEntries.length / checkBEntriesPerPage);
+              if (currentCheckBPage < maxPage) {
+                currentCheckBPage++;
+                renderCheckBTable();
               }
             }
 
-            document.getElementById('messageChecksSearchBox').addEventListener('input', function(e) {
-              currentMessageChecksPage = 1;
-              applyMessageChecksFilters();
+            document.getElementById('checkBSearchBox').addEventListener('input', function(e) {
+              currentCheckBPage = 1;
+              applyCheckBFilters();
             });
 
             // Initial render
-            renderMessageChecksTable();
+            renderCheckBTable();
 
             // Make sure these functions are available in the global scope
-            window.prevMessageChecksPage = prevMessageChecksPage;
-            window.nextMessageChecksPage = nextMessageChecksPage;
-            window.filterMessageChecksByMatch = filterMessageChecksByMatch;
+            window.prevCheckBPage = prevCheckBPage;
+            window.nextCheckBPage = nextCheckBPage;
+            window.filterCheckBBySuccess = filterCheckBBySuccess;
           </script>
         `;
 
@@ -710,6 +800,7 @@ router.get('/dashboard', (req, res) => {
                 </div>
               </div>
               ${additionalHtml}
+              ${checkBHtml}
               ${messageChecksHtml}
               <script>
                 try {
@@ -1262,6 +1353,7 @@ router.get('/dashboard', (req, res) => {
                   // Find the indices in filtered entries
                   const mainIndex = filteredEntries.findIndex(entry => entry.messageId === messageId);
                   const checkIndex = filteredCheckEntries.findIndex(entry => entry.messageId === messageId + '_');
+                  const checkBIndex = filteredCheckBEntries.findIndex(entry => entry.messageId === messageId + '!');
 
                   // Update main log table
                   if (mainIndex !== -1) {
@@ -1309,6 +1401,32 @@ router.get('/dashboard', (req, res) => {
                       const checkRows = Array.from(document.querySelectorAll('#checkLogTable tbody tr'));
                       checkRows.forEach(row => {
                         if (row.children[6].textContent === messageId + '_') {
+                          row.classList.add('highlighted-row');
+                        }
+                      });
+                    }
+                  }
+
+                  // Update check B log table
+                  if (checkBIndex !== -1) {
+                    const targetPage = Math.floor((filteredCheckBEntries.length - checkBIndex - 1) / checkBEntriesPerPage) + 1;
+                    if (currentCheckBPage !== targetPage) {
+                      currentCheckBPage = targetPage;
+                      renderCheckBTable();
+                      // Highlight after render
+                      setTimeout(() => {
+                        const checkBRows = Array.from(document.querySelectorAll('#checkBLogTable tbody tr'));
+                        checkBRows.forEach(row => {
+                          if (row.children[6].textContent === messageId + '!') {
+                            row.classList.add('highlighted-row');
+                          }
+                        });
+                      }, 0);
+                    } else {
+                      // Highlight immediately if no page change
+                      const checkBRows = Array.from(document.querySelectorAll('#checkBLogTable tbody tr'));
+                      checkBRows.forEach(row => {
+                        if (row.children[6].textContent === messageId + '!') {
                           row.classList.add('highlighted-row');
                         }
                       });

@@ -75,6 +75,9 @@ const requestStartTimes = new Map();
 const openMessagesCheck = new Map();
 const requestStartTimesCheck = new Map();
 
+const openMessagesCheckB = new Map();
+const requestStartTimesCheckB = new Map();
+
 const pendingMessageChecks = new Map();
 
 app.use(createPendingMessageChecksRouter(pendingMessageChecks));
@@ -133,28 +136,33 @@ app.post("/", validateRpcRequest, async (req, res) => {
     const clientsArray = Array.from(filteredConnectedClients.values());
     const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
 
-    let randomClientCheck;
-    if (clientsArray.length > 1) {
+    let randomClientCheck = null;
+    let randomClientCheckB = null;
+
+    // Only set up check clients if we have at least 3 clients
+    if (clientsArray.length >= 3) {
       const remainingClients = clientsArray.filter(client => client.clientID !== randomClient.clientID);
-      if (remainingClients.length > 0) {
-        randomClientCheck = remainingClients[Math.floor(Math.random() * remainingClients.length)];
-      }
+      randomClientCheck = remainingClients[Math.floor(Math.random() * remainingClients.length)];
+      const finalClients = remainingClients.filter(client => client.clientID !== randomClientCheck.clientID);
+      randomClientCheckB = finalClients[Math.floor(Math.random() * finalClients.length)];
     }
     
     if (randomClient && randomClient.ws) {
       const originalMessageId = generateMessageId(req.body, req.ip || req.connection.remoteAddress);
-      sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, null, pendingMessageChecks, null);
+      sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, originalMessageId, pendingMessageChecks, null);
 
-      // Send to second client if available
-      if (randomClientCheck && randomClientCheck.ws && randomClientCheck.clientID !== randomClient.clientID) {
+      // Only send check requests if we have all three clients
+      if (randomClientCheck && randomClientCheckB) {
+        // Send to second client
         sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId, pendingMessageChecks, largestBlockNumber);
+
+        // Send to third client
+        sendRpcRequestToClient(req, res, randomClientCheckB, openMessagesCheckB, requestStartTimesCheckB, wsMessageTimeout, true, openMessagesCheckB, requestStartTimesCheckB, originalMessageId, pendingMessageChecks, largestBlockNumber, true);
       }
     } else {
-      // If no valid client, use fallback (no check request needed)
       handleFallbackRequest(req, res, requestStartTimes, null);
     }
   } else {
-    // No clients connected, use fallback (no check request needed)
     handleFallbackRequest(req, res, requestStartTimes, null);
   }
 
@@ -215,7 +223,18 @@ wss.on('connection', (ws) => {
         handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
         // console.log('Received checkin message');
       } else if (parsedMessage.jsonrpc === '2.0') {
-        await handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck, requestStartTimesCheck, pendingMessageChecks);
+        await handleRpcResponseFromClient(
+          parsedMessage, 
+          openMessages, 
+          connectedClients, 
+          client, 
+          requestStartTimes, 
+          openMessagesCheck, 
+          requestStartTimesCheck, 
+          openMessagesCheckB, 
+          requestStartTimesCheckB, 
+          pendingMessageChecks
+        );
       } else {
         console.log('Received message with unknown type:', parsedMessage);
       }
@@ -260,5 +279,9 @@ module.exports = {
   app,
   connectedClients,
   openMessages,
-  requestStartTimes
+  requestStartTimes,
+  openMessagesCheck,
+  requestStartTimesCheck,
+  openMessagesCheckB,
+  requestStartTimesCheckB
 };

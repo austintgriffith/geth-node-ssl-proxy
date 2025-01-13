@@ -197,44 +197,71 @@ const compareResponses = (response1, response2, messageId) => {
 };
 
 const processMessageChecks = (pendingMessageChecks) => {
-  // Get all message IDs from the map
-  const messageIds = Array.from(pendingMessageChecks.keys());
+  console.log('processMessageChecks running...');
+  console.log('Current pendingMessageChecks size:', pendingMessageChecks.size);
   
-  // Filter for check messages (ending with '_')
-  const checkMessageIds = messageIds.filter(id => id.endsWith('_'));
+  const messageIds = Array.from(pendingMessageChecks.keys());
+  console.log('All message IDs:', messageIds);
+  
+  // Filter for check messages (ending with '_' or '!')
+  const checkMessageIds = messageIds.filter(id => id.endsWith('_') || id.endsWith('!'));
+  console.log('Filtered check message IDs:', checkMessageIds);
   
   for (const checkMessageId of checkMessageIds) {
-    // Get the corresponding main message ID by removing the '_'
+    // Get the corresponding main message ID by removing the '_' or '!'
     const mainMessageId = checkMessageId.slice(0, -1);
+    console.log(`Processing check message: ${checkMessageId}, main message: ${mainMessageId}`);
     
-    // Get both messages from the map
+    // Get all related messages
     const checkMessage = pendingMessageChecks.get(checkMessageId);
     const mainMessage = pendingMessageChecks.get(mainMessageId);
+    const checkMessageB = pendingMessageChecks.get(mainMessageId + '!');
     
-    // Skip if either message involves the fallback URL
-    if (checkMessage?.peerId === fallbackUrl || mainMessage?.peerId === fallbackUrl) {
-      // Clean up these messages without logging
+    console.log('Found messages:', {
+      checkMessage: checkMessage ? 'present' : 'missing',
+      mainMessage: mainMessage ? 'present' : 'missing',
+      checkMessageB: checkMessageB ? 'present' : 'missing'
+    });
+
+    // Skip if any message involves the fallback URL or if any nodes are duplicated
+    if (checkMessage?.peerId === fallbackUrl || 
+        mainMessage?.peerId === fallbackUrl || 
+        checkMessageB?.peerId === fallbackUrl ||
+        checkMessage?.peerId === checkMessageB?.peerId || // Check for duplicates
+        mainMessage?.peerId === checkMessage?.peerId ||
+        mainMessage?.peerId === checkMessageB?.peerId) {
+      console.log('Skipping due to fallback URL or duplicate nodes');
       pendingMessageChecks.delete(checkMessageId);
       pendingMessageChecks.delete(mainMessageId);
+      pendingMessageChecks.delete(mainMessageId + '!');
       continue;
     }
     
-    // Only process if we have both messages and neither involves fallback
-    if (checkMessage && mainMessage) {
-      // Compare responses using the new comparison function
-      const responsesMatch = compareResponses(
-        checkMessage.responseHash, 
-        mainMessage.responseHash,
-        mainMessageId
-      );
+    // Only process if we have all three messages
+    if (checkMessage && mainMessage && checkMessageB) {
+      console.log('Processing complete set of messages');
+      // Compare responses between all three clients
+      const matches12 = compareResponses(checkMessage.responseHash, mainMessage.responseHash, mainMessageId);
+      const matches23 = compareResponses(mainMessage.responseHash, checkMessageB.responseHash, mainMessageId);
+      const matches13 = compareResponses(checkMessage.responseHash, checkMessageB.responseHash, mainMessageId);
       
-      // Log the comparison result to file
-      const logMessage = `${mainMessageId}|${mainMessage.peerId}|${checkMessage.peerId}|${responsesMatch}\n`;
+      console.log('Comparison results:', { matches12, matches23, matches13 });
+      
+      // Consider it a match if at least two comparisons match
+      const responsesMatch = (matches12 && matches23) || (matches12 && matches13) || (matches23 && matches13);
+      
+      // Log the comparison result
+      const logMessage = `${mainMessageId}|${mainMessage.peerId}|${checkMessage.peerId}|${checkMessageB.peerId}|${responsesMatch}\n`;
       fs.appendFileSync('rpcMessageChecks.log', logMessage);
+      
+      console.log('Wrote to log file:', logMessage);
       
       // Clean up processed messages
       pendingMessageChecks.delete(checkMessageId);
       pendingMessageChecks.delete(mainMessageId);
+      pendingMessageChecks.delete(mainMessageId + '!');
+    } else {
+      console.log('Incomplete set of messages, waiting for more responses');
     }
   }
 };

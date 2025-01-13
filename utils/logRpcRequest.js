@@ -56,7 +56,9 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
   logEntry += '\n';
   
   // Determine which log file to write to based on message ID
-  const logFile = messageId.endsWith('_') ? 'rpcRequestsCheck.log' : 'rpcRequestsMain.log';
+  const logFile = messageId.endsWith('_') ? 'rpcRequestsCheck.log' : 
+                  messageId.endsWith('!') ? 'rpcRequestsCheckB.log' :
+                  'rpcRequestsMain.log';
   
   fs.appendFile(logFile, logEntry, (err) => {
     if (err) {
@@ -67,11 +69,15 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
   // Add to pendingMessageChecks if it's provided and this is a successful request
   // and this is not a fallback request
   if (pendingMessageChecks && success && responseHash && req.handlingClient !== null) {
+    // Store the message with its original ID (including any suffix)
     pendingMessageChecks.set(messageId, {
-      peerId,
-      messageId,
+      peerId: req.handlingClient.nodeStatusId,
+      messageId: messageId,  // Keep the original messageId with its suffix
       responseHash
     });
+
+    // Log the addition to help with debugging
+    console.log(`Added to pendingMessageChecks: ${messageId} from peer ${req.handlingClient.nodeStatusId}`);
   }
 
   // Clean up the start time
