@@ -36,17 +36,6 @@ const logDebug = (message, ...args) => {
 };
 
 const compareResponses = (response1, response2, messageId) => {
-  // Fields that are optional (added in network upgrades)
-  const optionalFields = [
-    'baseFeePerGas',    // Added in London
-    'withdrawalsRoot',   // Added in Shanghai
-    'withdrawals',      // Added in Shanghai
-    'blobGasUsed',      // Added in Cancun
-    'excessBlobGas',    // Added in Cancun
-    'parentBeaconBlockRoot',  // Added in Cancun
-    'totalDifficulty'   // Optional post-merge
-  ];
-
   const sortObject = (obj) => {
     if (Array.isArray(obj)) {
       return obj.map(sortObject).sort();
@@ -54,10 +43,7 @@ const compareResponses = (response1, response2, messageId) => {
     if (obj && typeof obj === 'object') {
       const sortedObj = {};
       Object.keys(obj).sort().forEach(key => {
-        // Skip optional fields entirely
-        if (!optionalFields.includes(key)) {
-          sortedObj[key] = sortObject(obj[key]);
-        }
+        sortedObj[key] = sortObject(obj[key]);
       });
       return sortedObj;
     }
@@ -66,21 +52,38 @@ const compareResponses = (response1, response2, messageId) => {
 
   const findDifferences = (obj1, obj2, path = '') => {
     const differences = [];
-    const allKeys = new Set([...Object.keys(obj1), ...Object.keys(obj2)]);
     
-    for (const key of allKeys) {
+    // Handle case where either value is not an object
+    if (typeof obj1 !== 'object' || typeof obj2 !== 'object' || 
+        obj1 === null || obj2 === null) {
+      if (obj1 !== obj2) {
+        differences.push({
+          path: path || 'root',
+          value1: obj1,
+          value2: obj2
+        });
+      }
+      return differences;
+    }
+
+    // Get common keys between both objects
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
+    const commonKeys = keys1.filter(key => keys2.includes(key));
+    
+    for (const key of commonKeys) {
       const currentPath = path ? `${path}.${key}` : key;
+      const val1 = obj1[key];
+      const val2 = obj2[key];
       
-      // Skip optional fields
-      if (optionalFields.includes(key)) continue;
-      
-      if (typeof obj1[key] === 'object' && typeof obj2[key] === 'object') {
-        differences.push(...findDifferences(obj1[key], obj2[key], currentPath));
-      } else if (obj1[key] !== obj2[key]) {
+      if (typeof val1 === 'object' && typeof val2 === 'object' &&
+          val1 !== null && val2 !== null) {
+        differences.push(...findDifferences(val1, val2, currentPath));
+      } else if (val1 !== val2) {
         differences.push({
           path: currentPath,
-          value1: obj1[key],
-          value2: obj2[key]
+          value1: val1,
+          value2: val2
         });
       }
     }
@@ -136,12 +139,11 @@ const compareResponses = (response1, response2, messageId) => {
     const obj2 = shouldParseJson(response2) ? JSON.parse(response2) : parseNumericResponse(response2);
     
     if (typeof obj1 === 'object' && typeof obj2 === 'object') {
-      const sortedObj1 = sortObject(obj1);
-      const sortedObj2 = sortObject(obj2);
+      // Only compare common fields between the two objects
+      const differences = findDifferences(obj1, obj2);
+      const matches = differences.length === 0;
 
-      const matches = JSON.stringify(sortedObj1) === JSON.stringify(sortedObj2);
       if (!matches) {
-        // Log the initial comparison info
         logDebug(`Starting comparison for message ${messageId}:`, {
           response1Type: typeof response1,
           response2Type: typeof response2,
@@ -149,14 +151,11 @@ const compareResponses = (response1, response2, messageId) => {
           response2Length: response2?.length
         });
 
-        // Find and log specific differences
-        const differences = findDifferences(sortedObj1, sortedObj2);
         logDebug(`Detailed differences for ${messageId}:`, differences);
 
-        // Still log the full objects for reference
         logDebug(`Full object mismatch for ${messageId}:`, {
-          sortedObj1,
-          sortedObj2
+          obj1,
+          obj2
         });
       }
       return matches;
@@ -180,7 +179,6 @@ const compareResponses = (response1, response2, messageId) => {
     }
     return matches;
   } catch (error) {
-    // If JSON parsing fails, log the error and inputs
     logDebug(`Starting comparison for message ${messageId}:`, {
       response1Type: typeof response1,
       response2Type: typeof response2,

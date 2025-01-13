@@ -11,7 +11,6 @@ const methodsAcceptingBlockNumber = [
   'eth_getBlockByNumber',
   'eth_getBlockTransactionCountByNumber',
   'eth_getUncleCountByBlockNumber',
-  'eth_getBlockByNumber',
   // 'eth_getUncleByBlockNumberAndIndex',
   // 'eth_getTransactionByBlockNumberAndIndex',
   'eth_getProof'
