@@ -27,9 +27,20 @@ function sendRpcRequestToClient(req, res, randomClient, openMessages, requestSta
 
     console.log(`Sending request to client. isCheck: ${isCheck}, isCheckB: ${isCheckB}, messageId: ${messageId}, originalMessageId: ${originalMessageId}`);
 
-    // Only proceed with check messages if method accepts block number
+    // If this is a check message and method doesn't accept block number, notify the main request
     if ((isCheck || isCheckB) && !methodsAcceptingBlockNumber.includes(req.body.method)) {
       console.log(`Skipping check for method ${req.body.method} - does not accept block number`);
+      // Find the main message and update its hasCheckMessages flag
+      const mainMessage = openMessages.get(originalMessageId);
+      if (mainMessage) {
+        mainMessage.req.hasCheckMessages = false;
+      }
+      // Important: Also notify the other check message if it exists
+      if (isCheck && openMessagesCheckB) {
+        openMessagesCheckB.delete(originalMessageId + '!');
+      } else if (isCheckB && openMessagesCheck) {
+        openMessagesCheck.delete(originalMessageId + '_');
+      }
       return;
     }
 
@@ -42,10 +53,36 @@ function sendRpcRequestToClient(req, res, randomClient, openMessages, requestSta
         throw new Error(`${isCheckB ? 'Check B' : 'Check A'} messages require corresponding openMessages and requestStartTimes parameters`);
       }
 
-      targetOpenMessages.set(messageId, { req, timestamp: Date.now(), rpcId: req.body.id });
+      targetOpenMessages.set(messageId, { 
+        req: {
+          body: req.body,
+          headers: req.headers,
+          ip: req.ip,
+          hasCheckMessages: req.hasCheckMessages,
+          get: req.get?.bind(req)
+        }, 
+        timestamp: Date.now(), 
+        rpcId: req.body.id 
+      });
       targetRequestStartTimes.set(messageId, performance.now());
     } else {
-      openMessages.set(messageId, { req, res, timestamp: Date.now(), rpcId: req.body.id });
+      // For main messages, only set hasCheckMessages if method accepts block number
+      if (!methodsAcceptingBlockNumber.includes(req.body.method)) {
+        req.hasCheckMessages = false;
+      }
+      
+      openMessages.set(messageId, { 
+        req: {
+          body: req.body,
+          headers: req.headers,
+          ip: req.ip,
+          hasCheckMessages: req.hasCheckMessages,
+          get: req.get?.bind(req)
+        }, 
+        res, 
+        timestamp: Date.now(), 
+        rpcId: req.body.id 
+      });
       requestStartTimes.set(messageId, performance.now());
     }
 
@@ -76,6 +113,11 @@ function sendRpcRequestToClient(req, res, randomClient, openMessages, requestSta
         openMessages.delete(messageId);
       }
     }, wsMessageTimeout);
+
+    // // Add flag to indicate if this request has check messages
+    // if (!isCheck && !isCheckB) {
+    //   req.hasCheckMessages = req.totalConnectedClients >= 3;
+    // }
   } catch (error) {
     console.error('Error sending RPC request:', error);
     throw error;

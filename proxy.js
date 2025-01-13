@@ -110,6 +110,31 @@ server.listen(httpsPort, () => {
   console.log(`HTTPS and WebSocket server listening on port ${httpsPort}...`);
 });
 
+function getRandomClients(clientsArray) {
+  if (clientsArray.length < 3) {
+    return [clientsArray[0], null, null];
+  }
+  
+  // Create a copy of the array to avoid modifying the original
+  const available = [...clientsArray];
+  
+  // Get first random client
+  const randomIndex1 = Math.floor(Math.random() * available.length);
+  const client1 = available[randomIndex1];
+  available.splice(randomIndex1, 1);
+  
+  // Get second random client
+  const randomIndex2 = Math.floor(Math.random() * available.length);
+  const client2 = available[randomIndex2];
+  available.splice(randomIndex2, 1);
+  
+  // Get third random client
+  const randomIndex3 = Math.floor(Math.random() * available.length);
+  const client3 = available[randomIndex3];
+  
+  return [client1, client2, client3];
+}
+
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("--------------------------------------------------------");
   console.log("📡 RPC REQUEST", req.body);
@@ -130,66 +155,65 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
   await updateRequestOrigin(reqHost);
 
-  const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
-
-  if(filteredConnectedClients.size > 0) {
-    const clientsArray = Array.from(filteredConnectedClients.values());
-    const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
-
-    let randomClientCheck = null;
-    let randomClientCheckB = null;
-
-    // Only set up check clients if we have at least 3 clients
-    if (clientsArray.length >= 3) {
-      const remainingClients = clientsArray.filter(client => client.clientID !== randomClient.clientID);
-      randomClientCheck = remainingClients[Math.floor(Math.random() * remainingClients.length)];
-      const finalClients = remainingClients.filter(client => client.clientID !== randomClientCheck.clientID);
-      randomClientCheckB = finalClients[Math.floor(Math.random() * finalClients.length)];
-    }
+  try {
+    const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
     
-    if (randomClient && randomClient.ws) {
-      const originalMessageId = generateMessageId(req.body, req.ip || req.connection.remoteAddress);
-      sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, originalMessageId, pendingMessageChecks, null);
+    if(filteredConnectedClients.size > 0) {
+      const clientsArray = Array.from(filteredConnectedClients.values());
+      req.totalConnectedClients = clientsArray.length;
+      
+      // Set hasCheckMessages flag BEFORE sending any requests
+      req.hasCheckMessages = clientsArray.length >= 3;
+      
+      // Get random clients for main and check requests
+      const [randomClient, randomClientCheck, randomClientCheckB] = getRandomClients(clientsArray);
 
-      // Only send check requests if we have all three clients
-      if (randomClientCheck && randomClientCheckB) {
-        // Send to second client
-        console.log('Sending check request (_):', {
-          messageId: originalMessageId + '_',
-          client: randomClientCheck.clientID,
-          isCheck: true
-        });
-        sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId, pendingMessageChecks, largestBlockNumber);
+      if (randomClient && randomClient.ws) {
+        const originalMessageId = generateMessageId(req.body, req.ip || req.connection.remoteAddress);
+        
+        // Only send the main request if we have enough clients for checks
+        if (!randomClientCheck || !randomClientCheckB) {
+          // Not enough clients for checks, just send main request without adding to pendingMessageChecks
+          req.hasCheckMessages = false;
+          sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, originalMessageId, null, null);
+        } else {
+          // We have enough clients, send all requests
+          req.hasCheckMessages = true;
+          
+          // Send check requests first
+          console.log('Sending check request (_):', {
+            messageId: originalMessageId + '_',
+            client: randomClientCheck.clientID,
+            isCheck: true
+          });
+          sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId, pendingMessageChecks, largestBlockNumber);
 
-        // Send to third client (Check B)
-        console.log('Sending check request (!):', {
-          messageId: originalMessageId + '!',
-          client: randomClientCheckB.clientID,
-          isCheck: false
-        });
-        sendRpcRequestToClient(
-          req, 
-          res, 
-          randomClientCheckB, 
-          openMessagesCheckB,
-          requestStartTimesCheckB,
-          wsMessageTimeout, 
-          false,
-          openMessagesCheck,
-          requestStartTimesCheck,
-          originalMessageId, 
-          pendingMessageChecks, 
-          largestBlockNumber,
-          true,
-          openMessagesCheckB,
-          requestStartTimesCheckB
-        );
+          console.log('Sending check request (!):', {
+            messageId: originalMessageId + '!',
+            client: randomClientCheckB.clientID,
+            isCheck: false
+          });
+          sendRpcRequestToClient(
+            req, res, randomClientCheckB, openMessagesCheckB,
+            requestStartTimesCheckB, wsMessageTimeout, false,
+            openMessagesCheck, requestStartTimesCheck,
+            originalMessageId, pendingMessageChecks,
+            largestBlockNumber, true, openMessagesCheckB,
+            requestStartTimesCheckB
+          );
+
+          // Now send the main request
+          sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, originalMessageId, pendingMessageChecks, null);
+        }
+      } else {
+        handleFallbackRequest(req, res, requestStartTimes, null);
       }
     } else {
       handleFallbackRequest(req, res, requestStartTimes, null);
     }
-  } else {
-    handleFallbackRequest(req, res, requestStartTimes, null);
+  } catch (error) {
+    console.error('Error processing request:', error);
+    handleFallbackRequest(req, res, requestStartTimes, error);
   }
 
   console.log("POST SERVED", req.body);
@@ -270,7 +294,29 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    console.log('WebSocket client disconnected');
+    console.log('WebSocket client disconnected:', client.clientID);
+    
+    // Clean up any pending messages from this client
+    for (const [messageId, message] of openMessages) {
+      if (message.req.handlingClient?.clientID === client.clientID) {
+        console.log(`Cleaning up pending message ${messageId} for disconnected client ${client.clientID}`);
+        openMessages.delete(messageId);
+      }
+    }
+    
+    // Also clean up check messages
+    for (const [messageId, message] of openMessagesCheck) {
+      if (message.req.handlingClient?.clientID === client.clientID) {
+        openMessagesCheck.delete(messageId);
+      }
+    }
+    
+    for (const [messageId, message] of openMessagesCheckB) {
+      if (message.req.handlingClient?.clientID === client.clientID) {
+        openMessagesCheckB.delete(messageId);
+      }
+    }
+    
     connectedClients.delete(client);
   });
 });
@@ -297,7 +343,7 @@ checkForFallback();
 setInterval(() => cleanupOpenMessages(openMessages, messageCleanupInterval), messageCleanupInterval);
 
 // Process message checks every 10 seconds
-setInterval(() => processMessageChecks(pendingMessageChecks), 10000);
+setInterval(() => processMessageChecks(pendingMessageChecks), 20000);
 
 // Set up an interval to check for pending message checks, compare results, and log results
 
@@ -309,5 +355,6 @@ module.exports = {
   openMessagesCheck,
   requestStartTimesCheck,
   openMessagesCheckB,
-  requestStartTimesCheckB
+  requestStartTimesCheckB,
+  pendingMessageChecks
 };

@@ -199,29 +199,75 @@ const compareResponses = (response1, response2, messageId) => {
 const processMessageChecks = (pendingMessageChecks) => {
   console.log('🚛  🚛  🚛  🚛  🚛')
   console.log('processMessageChecks running...');
+
+    // First, group all messages by their base ID (without suffixes)
+    const messageGroups = new Map();
+  
+    for (const [messageId, message] of pendingMessageChecks.entries()) {
+      const baseId = messageId.endsWith('_') || messageId.endsWith('!') 
+        ? messageId.slice(0, -1) 
+        : messageId;
+        
+      if (!messageGroups.has(baseId)) {
+        messageGroups.set(baseId, new Set());
+      }
+      messageGroups.get(baseId).add(messageId);
+    }
+    
+    // Clean up any incomplete message groups
+    for (const [baseId, messageIds] of messageGroups.entries()) {
+      // A complete group should have exactly 3 messages:
+      // baseId, baseId_, baseId!
+      if (messageIds.size !== 3) {
+        console.log(`Found incomplete message group for ${baseId}, cleaning up...`);
+        // Delete all messages in this incomplete group
+        for (const messageId of messageIds) {
+          pendingMessageChecks.delete(messageId);
+        }
+      }
+    }
+    
   console.log('Current pendingMessageChecks size:', pendingMessageChecks.size);
   
+  // First, get all main messages that don't have corresponding check messages
   const messageIds = Array.from(pendingMessageChecks.keys());
-  console.log('All message IDs:', messageIds);
+  const mainMessageIds = messageIds.filter(id => !id.endsWith('_') && !id.endsWith('!'));
   
-  // Filter for check messages (ending with '_' or '!')
+  // Clean up orphaned main messages
+  for (const mainMessageId of mainMessageIds) {
+    const hasCheckMessage = pendingMessageChecks.has(mainMessageId + '_');
+    const hasCheckMessageB = pendingMessageChecks.has(mainMessageId + '!');
+    
+    // If this main message doesn't have both check messages, delete it
+    if (!hasCheckMessage || !hasCheckMessageB) {
+      console.log(`Cleaning up orphaned main message: ${mainMessageId}`);
+      pendingMessageChecks.delete(mainMessageId);
+      continue;
+    }
+  }
+
+  // Now process check messages as before
   const checkMessageIds = messageIds.filter(id => id.endsWith('_') || id.endsWith('!'));
   console.log('Filtered check message IDs:', checkMessageIds);
   
+  const processedIds = new Set();
   for (const checkMessageId of checkMessageIds) {
-    // Get the corresponding main message ID by removing the '_' or '!'
+    // Skip if we've already processed this message's group
     const mainMessageId = checkMessageId.slice(0, -1);
-    console.log(`Processing check message: ${checkMessageId}, main message: ${mainMessageId}`);
-    
+    if (processedIds.has(mainMessageId)) {
+      continue;
+    }
+
     // Get all related messages
-    const checkMessage = pendingMessageChecks.get(mainMessageId + '_');
     const mainMessage = pendingMessageChecks.get(mainMessageId);
+    const checkMessage = pendingMessageChecks.get(mainMessageId + '_');
     const checkMessageB = pendingMessageChecks.get(mainMessageId + '!');
     
+    // Log the actual message contents for debugging
     console.log('Found messages:', {
-      checkMessage: checkMessage ? 'present' : 'missing',
-      mainMessage: mainMessage ? 'present' : 'missing',
-      checkMessageB: checkMessageB ? 'present' : 'missing'
+      checkMessage: checkMessage ? `present (${checkMessage.peerId})` : 'missing',
+      mainMessage: mainMessage ? `present (${mainMessage.peerId})` : 'missing',
+      checkMessageB: checkMessageB ? `present (${checkMessageB.peerId})` : 'missing'
     });
 
     // Skip if any message involves the fallback URL or if any nodes are duplicated
@@ -261,6 +307,9 @@ const processMessageChecks = (pendingMessageChecks) => {
       pendingMessageChecks.delete(checkMessageId);
       pendingMessageChecks.delete(mainMessageId);
       pendingMessageChecks.delete(mainMessageId + '!');
+
+      // After successful processing
+      processedIds.add(mainMessageId);
     } else {
       console.log('Incomplete set of messages, waiting for more responses');
     }

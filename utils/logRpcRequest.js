@@ -15,12 +15,14 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
   const epochTime = Math.floor(now.getTime() / 1000);
 
   // Get request origin from headers
-  let reqHost = req.get('Referer') || req.get('Origin') || req.get('host');
+  let reqHost = req.get ? (req.get('Referer') || req.get('Origin') || req.get('host')) 
+  : (req.headers?.referer || req.headers?.origin || req.headers?.host);
+
   try {
     const url = new URL(reqHost);
     reqHost = url.hostname;
   } catch (error) {
-    reqHost = req.get('host').split(':')[0];
+    reqHost = (req.get ? req.get('host') : req.headers?.host)?.split(':')[0] || 'unknown';
   }
 
   // Get peerId from the client that handled the request
@@ -67,17 +69,22 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
   });
 
   // Add to pendingMessageChecks if it's provided and this is a successful request
-  // and this is not a fallback request
+  // and this is not a fallback request and it's either a check message or has corresponding check messages
   if (pendingMessageChecks && success && responseHash && req.handlingClient !== null) {
-    // Store the message with its original ID (including any suffix)
-    pendingMessageChecks.set(messageId, {
-      peerId: req.handlingClient.nodeStatusId,
-      messageId: messageId,  // Keep the original messageId with its suffix
-      responseHash
-    });
+    const isCheckMessage = messageId.endsWith('_') || messageId.endsWith('!');
+    
+    // Only add if it's a check message OR if it's a main message that we know had check messages sent
+    if (isCheckMessage || req.hasCheckMessages) {
+      pendingMessageChecks.set(messageId, {
+        peerId: req.handlingClient.nodeStatusId,
+        messageId: messageId,
+        responseHash
+      });
 
-    // Log the addition to help with debugging
-    console.log(`Added to pendingMessageChecks: ${messageId} from peer ${req.handlingClient.nodeStatusId}`);
+      console.log(`Added to pendingMessageChecks: ${messageId} from peer ${req.handlingClient.nodeStatusId}`);
+    } else {
+      console.log(`Skipping pendingMessageChecks for message ${messageId} - no check messages were generated`);
+    }
   }
 
   // Clean up the start time

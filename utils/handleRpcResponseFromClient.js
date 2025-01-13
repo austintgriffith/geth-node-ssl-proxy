@@ -14,7 +14,26 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
     .find(c => c.clientID === client.clientID);
 
   if (!handlingClient) {
-    console.error(`No handling client found for clientID: ${client.clientID}`);
+    console.error(`Client ${client.clientID} no longer connected - discarding response for message ${messageId}`);
+    
+    // Clean up any pending messages for this client
+    if (openMessages.has(messageId)) {
+      const message = openMessages.get(messageId);
+      message.res?.status(502).json({
+        jsonrpc: "2.0",
+        id: message.rpcId,
+        error: {
+          code: -32603,
+          message: "Bad Gateway",
+          data: "Client disconnected while processing request"
+        }
+      });
+      openMessages.delete(messageId);
+    }
+    
+    // Also clean up from check message maps
+    openMessagesCheck?.delete(messageId);
+    openMessagesCheckB?.delete(messageId);
     return;
   }
 
