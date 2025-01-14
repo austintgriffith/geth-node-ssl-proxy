@@ -469,12 +469,12 @@ router.get('/dashboard', (req, res) => {
 
         // Update the messageChecksHtml variable to use the parsed data
         const messageChecksHtml = `
-          <div class="chart-container">
+          <div class="chart-container" id="messageChecksContainer">
             <h2 class="tableHeader">Message Checks</h2>
             <div style="margin-bottom: 10px;">
-              <button onclick="window.filterMessageChecksByMatch(null)" class="filter-btn active">All</button>
-              <button onclick="window.filterMessageChecksByMatch(true)" class="filter-btn">Matching</button>
-              <button onclick="window.filterMessageChecksByMatch(false)" class="filter-btn">Non-matching</button>
+              <button onclick="filterMessageChecksByMatch(null)" class="filter-btn active" id="messageChecksAllBtn">All</button>
+              <button onclick="filterMessageChecksByMatch(true)" class="filter-btn" id="messageChecksMatchingBtn">Matching</button>
+              <button onclick="filterMessageChecksByMatch(false)" class="filter-btn" id="messageChecksNonMatchingBtn">Non-matching</button>
             </div>
             <input 
               type="text" 
@@ -552,7 +552,8 @@ router.get('/dashboard', (req, res) => {
                     entry.checkPeerId.toLowerCase().includes(searchTerm) ||
                     entry.checkPeerIdB.toLowerCase().includes(searchTerm);
                     
-                  const matchesResult = messageChecksMatchFilter === null || entry.matchResult === messageChecksMatchFilter;
+                  const matchesResult = messageChecksMatchFilter === null || 
+                                       entry.matchResult === messageChecksMatchFilter;
                   
                   return matchesSearch && matchesResult;
                 });
@@ -565,8 +566,16 @@ router.get('/dashboard', (req, res) => {
                 messageChecksMatchFilter = matchResult;
                 currentMessageChecksPage = 1;
                 
-                document.querySelectorAll('#messageChecksTable ~ div .filter-btn').forEach(btn => btn.classList.remove('active'));
-                document.querySelector('#messageChecksTable ~ div button[onclick="window.filterMessageChecksByMatch(' + (matchResult === null ? 'null' : matchResult) + ')"]').classList.add('active');
+                // Update button states by selecting all filter buttons within the message checks container
+                document.querySelectorAll('#messageChecksContainer .filter-btn').forEach(btn => {
+                  btn.classList.remove('active');
+                });
+                
+                // Select the appropriate button based on the filter value
+                const buttonId = matchResult === null ? 'messageChecksAllBtn' : 
+                                matchResult === true ? 'messageChecksMatchingBtn' : 
+                                'messageChecksNonMatchingBtn';
+                document.getElementById(buttonId).classList.add('active');
                 
                 applyMessageChecksFilters();
               };
