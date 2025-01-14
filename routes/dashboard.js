@@ -348,7 +348,7 @@ router.get('/dashboard', (req, res) => {
 
             function getCheckPageRange() {
               const totalPages = Math.ceil(filteredCheckEntries.length / checkEntriesPerPage);
-              const maxPages = 50;
+              const maxPages = 20;
               
               if (totalPages <= maxPages) return totalPages;
               return maxPages;
@@ -512,7 +512,7 @@ router.get('/dashboard', (req, res) => {
               let currentMessageChecksPage = 1;
 
               function renderMessageChecksTable() {
-                const maxPages = 50;
+                const maxPages = 20;
                 const totalPages = Math.ceil(filteredMessageChecksEntries.length / messageChecksPerPage);
                 const actualPages = Math.min(totalPages, maxPages);
                 
@@ -672,7 +672,7 @@ router.get('/dashboard', (req, res) => {
 
             function getCheckBPageRange() {
               const totalPages = Math.ceil(filteredCheckBEntries.length / checkBEntriesPerPage);
-              const maxPages = 50;
+              const maxPages = 20;
               
               if (totalPages <= maxPages) return totalPages;
               return maxPages;
@@ -1340,7 +1340,7 @@ router.get('/dashboard', (req, res) => {
 
                 function getPageRange() {
                   const totalPages = Math.ceil(filteredEntries.length / entriesPerPage);
-                  const maxPages = 50;
+                  const maxPages = 20;
                   
                   if (totalPages <= maxPages) return totalPages;
                   
