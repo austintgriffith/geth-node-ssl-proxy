@@ -10,7 +10,7 @@ router.get('/dashboard', (req, res) => {
   // Read both log files in parallel
   Promise.all([
     new Promise((resolve, reject) => {
-      fs.readFile(path.join(__dirname, '../rpcRequestsMain.log'), 'utf8', (err, data) => {
+      fs.readFile(path.join(__dirname, '../rpcRequests.log'), 'utf8', (err, data) => {
         if (err) reject(err);
         else resolve(data);
       });
@@ -97,7 +97,7 @@ router.get('/dashboard', (req, res) => {
             y: peerData[peerId],
             name: peerId,
             type: 'box',
-            boxpoints: 'outliers',
+            boxpoints: false,
             lowerfence: [lower],
             upperfence: [upper],
             marker: {
@@ -118,7 +118,7 @@ router.get('/dashboard', (req, res) => {
             y: reqHostData[reqHost],
             name: reqHost,
             type: 'box',
-            boxpoints: 'outliers',
+            boxpoints: false,
             lowerfence: [lower],
             upperfence: [upper],
             showlegend: true,
@@ -156,7 +156,7 @@ router.get('/dashboard', (req, res) => {
             y: methodData[method],
             name: method,
             type: 'box',
-            boxpoints: 'outliers',
+            boxpoints: false,
             lowerfence: [lower],
             upperfence: [upper],
             showlegend: true,
