@@ -346,11 +346,18 @@ router.get('/dashboard', (req, res) => {
             const checkEntriesPerPage = 30;
             let currentCheckPage = 1;
 
+            function getCheckPageRange() {
+              const totalPages = Math.ceil(filteredCheckEntries.length / checkEntriesPerPage);
+              const maxPages = 50;
+              
+              if (totalPages <= maxPages) return totalPages;
+              return maxPages;
+            }
+
             function filterCheckBySuccess(success) {
               checkSuccessFilter = success;
               currentCheckPage = 1;
               
-              // Update button styles
               document.querySelectorAll('#checkLogTable ~ div .filter-btn').forEach(btn => btn.classList.remove('active'));
               document.querySelector(\`#checkLogTable ~ div button[onclick="filterCheckBySuccess(\${success === null ? 'null' : success})"]\`).classList.add('active');
               
@@ -378,9 +385,13 @@ router.get('/dashboard', (req, res) => {
             }
 
             function renderCheckTable() {
+              const maxPages = getCheckPageRange();
+              if (currentCheckPage > maxPages) currentCheckPage = maxPages;
+              
               const start = (currentCheckPage - 1) * checkEntriesPerPage;
               const end = start + checkEntriesPerPage;
               const currentEntries = [...filteredCheckEntries]
+                .slice(0, maxPages * checkEntriesPerPage)
                 .reverse()
                 .slice(start, end);
 
@@ -399,7 +410,7 @@ router.get('/dashboard', (req, res) => {
               \`).join('');
 
               document.getElementById('checkPageInfo').textContent = 
-                \`Page \${currentCheckPage} of \${Math.ceil(filteredCheckEntries.length / checkEntriesPerPage)}\`;
+                \`Page \${currentCheckPage} of \${maxPages}\`;
             }
 
             function prevCheckPage() {
@@ -499,9 +510,17 @@ router.get('/dashboard', (req, res) => {
               let currentMessageChecksPage = 1;
 
               function renderMessageChecksTable() {
+                const maxPages = 50;
+                const totalPages = Math.ceil(filteredMessageChecksEntries.length / messageChecksPerPage);
+                const actualPages = Math.min(totalPages, maxPages);
+                
+                if (currentMessageChecksPage > actualPages) currentMessageChecksPage = actualPages;
+                
                 const start = (currentMessageChecksPage - 1) * messageChecksPerPage;
                 const end = start + messageChecksPerPage;
-                const currentEntries = filteredMessageChecksEntries.slice(start, end);
+                const currentEntries = filteredMessageChecksEntries
+                  .slice(0, maxPages * messageChecksPerPage)
+                  .slice(start, end);
 
                 const tbody = document.querySelector('#messageChecksTable tbody');
                 tbody.innerHTML = currentEntries.map(entry => 
@@ -518,7 +537,7 @@ router.get('/dashboard', (req, res) => {
                 ).join('');
 
                 document.getElementById('messageChecksPageInfo').textContent = 
-                  'Page ' + currentMessageChecksPage + ' of ' + Math.ceil(filteredMessageChecksEntries.length / messageChecksPerPage);
+                  'Page ' + currentMessageChecksPage + ' of ' + actualPages;
               }
 
               function applyMessageChecksFilters() {
@@ -640,11 +659,18 @@ router.get('/dashboard', (req, res) => {
             const checkBEntriesPerPage = 30;
             let currentCheckBPage = 1;
 
+            function getCheckBPageRange() {
+              const totalPages = Math.ceil(filteredCheckBEntries.length / checkBEntriesPerPage);
+              const maxPages = 50;
+              
+              if (totalPages <= maxPages) return totalPages;
+              return maxPages;
+            }
+
             function filterCheckBBySuccess(success) {
               checkBSuccessFilter = success;
               currentCheckBPage = 1;
               
-              // Update button styles
               document.querySelectorAll('#checkBLogTable ~ div .filter-btn').forEach(btn => btn.classList.remove('active'));
               document.querySelector(\`#checkBLogTable ~ div button[onclick="filterCheckBBySuccess(\${success === null ? 'null' : success})"]\`).classList.add('active');
               
@@ -672,9 +698,13 @@ router.get('/dashboard', (req, res) => {
             }
 
             function renderCheckBTable() {
+              const maxPages = getCheckBPageRange();
+              if (currentCheckBPage > maxPages) currentCheckBPage = maxPages;
+              
               const start = (currentCheckBPage - 1) * checkBEntriesPerPage;
               const end = start + checkBEntriesPerPage;
               const currentEntries = [...filteredCheckBEntries]
+                .slice(0, maxPages * checkBEntriesPerPage)
                 .reverse()
                 .slice(start, end);
 
@@ -693,7 +723,7 @@ router.get('/dashboard', (req, res) => {
               \`).join('');
 
               document.getElementById('checkBPageInfo').textContent = 
-                \`Page \${currentCheckBPage} of \${Math.ceil(filteredCheckBEntries.length / checkBEntriesPerPage)}\`;
+                \`Page \${currentCheckBPage} of \${maxPages}\`;
             }
 
             function prevCheckBPage() {
@@ -1295,10 +1325,24 @@ router.get('/dashboard', (req, res) => {
                   renderTable();
                 }
 
+                function getPageRange() {
+                  const totalPages = Math.ceil(filteredEntries.length / entriesPerPage);
+                  const maxPages = 50;
+                  
+                  if (totalPages <= maxPages) return totalPages;
+                  
+                  // If we have more than maxPages, we'll show only the first maxPages
+                  return maxPages;
+                }
+
                 function renderTable() {
+                  const maxPages = getPageRange();
+                  if (currentPage > maxPages) currentPage = maxPages;
+                  
                   const start = (currentPage - 1) * entriesPerPage;
                   const end = start + entriesPerPage;
                   const currentEntries = [...filteredEntries]
+                    .slice(0, maxPages * entriesPerPage) // Limit total entries
                     .reverse()
                     .slice(start, end);
 
@@ -1316,7 +1360,8 @@ router.get('/dashboard', (req, res) => {
                       </tr>
                   \`).join('');
 
-                  document.getElementById('pageInfo').textContent = \`Page \${currentPage} of \${Math.ceil(filteredEntries.length / entriesPerPage)}\`;
+                  document.getElementById('pageInfo').textContent = 
+                    \`Page \${currentPage} of \${maxPages}\`;
                   
                   // Update button states
                   const prevButton = document.querySelector('button[onclick="prevPage()"]');
