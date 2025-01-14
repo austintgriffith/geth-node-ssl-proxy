@@ -388,12 +388,14 @@ router.get('/dashboard', (req, res) => {
               const maxPages = getCheckPageRange();
               if (currentCheckPage > maxPages) currentCheckPage = maxPages;
               
+              // Take the latest entries first by reversing before slicing
+              const latestEntries = [...filteredCheckEntries]
+                .reverse()
+                .slice(0, maxPages * checkEntriesPerPage);
+                
               const start = (currentCheckPage - 1) * checkEntriesPerPage;
               const end = start + checkEntriesPerPage;
-              const currentEntries = [...filteredCheckEntries]
-                .slice(0, maxPages * checkEntriesPerPage)
-                .reverse()
-                .slice(start, end);
+              const currentEntries = latestEntries.slice(start, end);
 
               const tbody = document.querySelector('#checkLogTable tbody');
               tbody.innerHTML = currentEntries.map(entry => \`
@@ -701,12 +703,14 @@ router.get('/dashboard', (req, res) => {
               const maxPages = getCheckBPageRange();
               if (currentCheckBPage > maxPages) currentCheckBPage = maxPages;
               
+              // Take the latest entries first by reversing before slicing
+              const latestEntries = [...filteredCheckBEntries]
+                .reverse()
+                .slice(0, maxPages * checkBEntriesPerPage);
+                
               const start = (currentCheckBPage - 1) * checkBEntriesPerPage;
               const end = start + checkBEntriesPerPage;
-              const currentEntries = [...filteredCheckBEntries]
-                .slice(0, maxPages * checkBEntriesPerPage)
-                .reverse()
-                .slice(start, end);
+              const currentEntries = latestEntries.slice(start, end);
 
               const tbody = document.querySelector('#checkBLogTable tbody');
               tbody.innerHTML = currentEntries.map(entry => \`
@@ -1339,12 +1343,14 @@ router.get('/dashboard', (req, res) => {
                   const maxPages = getPageRange();
                   if (currentPage > maxPages) currentPage = maxPages;
                   
+                  // Take the latest entries first by reversing before slicing
+                  const latestEntries = [...filteredEntries]
+                    .reverse()
+                    .slice(0, maxPages * entriesPerPage); // Limit to latest entries
+                    
                   const start = (currentPage - 1) * entriesPerPage;
                   const end = start + entriesPerPage;
-                  const currentEntries = [...filteredEntries]
-                    .slice(0, maxPages * entriesPerPage) // Limit total entries
-                    .reverse()
-                    .slice(start, end);
+                  const currentEntries = latestEntries.slice(start, end);
 
                   const tbody = document.querySelector('#logTable tbody');
                   tbody.innerHTML = currentEntries.map(entry => \`
