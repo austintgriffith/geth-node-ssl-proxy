@@ -4,10 +4,44 @@ const { incrementRpcRequests } = require('../database_scripts/incrementRpcReques
 const { getOwnerForClientId } = require('./getOwnerForClientId');
 const { incrementOwnerPoints } = require('../database_scripts/incrementOwnerPoints');
 
-async function handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck = null, requestStartTimesCheck = null, pendingMessageChecks = null) {
+async function handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck = null, requestStartTimesCheck = null, openMessagesCheckB = null, requestStartTimesCheckB = null, pendingMessageChecks = null) {
   const messageId = parsedMessage.bgMessageId;
-  console.log('Received message:', parsedMessage);
+  console.log('Received message:', messageId);
   
+  // Get client info first
+  const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
+  const handlingClient = Array.from(filteredConnectedClients.values())
+    .find(c => c.clientID === client.clientID);
+
+  if (!handlingClient) {
+    console.error(`Client ${client.clientID} no longer connected - discarding response for message ${messageId}`);
+    
+    // Clean up any pending messages for this client
+    if (openMessages.has(messageId)) {
+      const message = openMessages.get(messageId);
+      message.res?.status(502).json({
+        jsonrpc: "2.0",
+        id: message.rpcId,
+        error: {
+          code: -32603,
+          message: "Bad Gateway",
+          data: "Client disconnected while processing request"
+        }
+      });
+      openMessages.delete(messageId);
+    }
+    
+    // Also clean up from check message maps
+    openMessagesCheck?.delete(messageId);
+    openMessagesCheckB?.delete(messageId);
+    return;
+  }
+
+  // Add debug logging for check B messages
+  if (openMessagesCheckB && openMessagesCheckB.has(messageId)) {
+    console.log('Found check B message in openMessagesCheckB:', messageId);
+  }
+
   if (messageId && openMessages.has(messageId)) {
     console.log(`📲 Found matching open message with id ${messageId}. Sending response.`);
     const openMessage = openMessages.get(messageId);
@@ -23,9 +57,6 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
       openMessages.delete(messageId);
 
       // Add client info to the request object
-      const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
-      const handlingClient = Array.from(filteredConnectedClients.values())
-        .find(c => c.clientID === client.clientID);
       openMessage.req.handlingClient = handlingClient;
 
       // Log the RPC request with timing information
@@ -45,13 +76,21 @@ async function handleRpcResponseFromClient(parsedMessage, openMessages, connecte
     const openMessage = openMessagesCheck.get(messageId);
     
     // Add client info to the request object for check messages
-    const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
-    const handlingClient = Array.from(filteredConnectedClients.values())
-      .find(c => c.clientID === client.clientID);
     openMessage.req.handlingClient = handlingClient;
     
     logRpcRequest(openMessage.req, messageId, requestStartTimesCheck || requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
     openMessagesCheck.delete(messageId);
+  } else if (messageId && openMessagesCheckB && openMessagesCheckB.has(messageId)) {
+    console.log(`Logging response for check message B with id ${messageId}`);
+    const openMessage = openMessagesCheckB.get(messageId);
+    
+    openMessage.req.handlingClient = handlingClient;
+    
+    // Important: Don't modify the messageId, use it as is
+    console.log('Check B message ID before logging:', messageId);
+    
+    logRpcRequest(openMessage.req, messageId, requestStartTimesCheckB || requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
+    openMessagesCheckB.delete(messageId);
   } else {
     console.log(`No open message found for id ${messageId}. This might be a delayed response.`);
   }

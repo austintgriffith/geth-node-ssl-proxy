@@ -18,110 +18,109 @@ const methodsAcceptingBlockNumber = [
 
 const BLOCK_TAGS = ['latest', 'pending', 'earliest'];
 
-function sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, isCheck = false, openMessagesCheck = null, requestStartTimesCheck = null, originalMessageId = null, pendingMessageChecks = null, largestBlockNumber = null) {
+function sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, isCheck = false, openMessagesCheck = null, requestStartTimesCheck = null, originalMessageId = null, pendingMessageChecks = null, largestBlockNumber = null, isCheckB = false, openMessagesCheckB = null, requestStartTimesCheckB = null) {
   try {
-    const clientIp = req.ip || req.connection.remoteAddress;
-    const messageId = isCheck ? originalMessageId + '_' : generateMessageId(req.body, clientIp);
+    // Generate message ID with appropriate suffix
+    const messageId = isCheck ? originalMessageId + '_' : 
+                     isCheckB ? originalMessageId + '!' :
+                     originalMessageId || generateMessageId(req.body, req.ip || req.connection.remoteAddress);
 
-    if (!isCheck) {
-      console.log('➕ Adding new open message with id:', messageId);
-      openMessages.set(messageId, { req, res, timestamp: Date.now(), rpcId: req.body.id });
+    console.log(`Sending request to client. isCheck: ${isCheck}, isCheckB: ${isCheckB}, messageId: ${messageId}, originalMessageId: ${originalMessageId}`);
+
+    // If this is a check message and method doesn't accept block number, notify the main request
+    if ((isCheck || isCheckB) && !methodsAcceptingBlockNumber.includes(req.body.method)) {
+      console.log(`Skipping check for method ${req.body.method} - does not accept block number`);
+      // Find the main message and update its hasCheckMessages flag
+      const mainMessage = openMessages.get(originalMessageId);
+      if (mainMessage) {
+        mainMessage.req.hasCheckMessages = false;
+      }
+      // Important: Also notify the other check message if it exists
+      if (isCheck && openMessagesCheckB) {
+        openMessagesCheckB.delete(originalMessageId + '!');
+      } else if (isCheckB && openMessagesCheck) {
+        openMessagesCheck.delete(originalMessageId + '_');
+      }
+      return;
+    }
+
+    // For check messages, ensure we're using the correct message stores
+    if (isCheck || isCheckB) {
+      const targetOpenMessages = isCheckB ? openMessagesCheckB : openMessagesCheck;
+      const targetRequestStartTimes = isCheckB ? requestStartTimesCheckB : requestStartTimesCheck;
+
+      if (!targetOpenMessages || !targetRequestStartTimes) {
+        throw new Error(`${isCheckB ? 'Check B' : 'Check A'} messages require corresponding openMessages and requestStartTimes parameters`);
+      }
+
+      targetOpenMessages.set(messageId, { 
+        req: {
+          body: req.body,
+          headers: req.headers,
+          ip: req.ip,
+          hasCheckMessages: req.hasCheckMessages,
+          get: req.get?.bind(req)
+        }, 
+        timestamp: Date.now(), 
+        rpcId: req.body.id 
+      });
+      targetRequestStartTimes.set(messageId, performance.now());
+    } else {
+      // For main messages, only set hasCheckMessages if method accepts block number
+      if (!methodsAcceptingBlockNumber.includes(req.body.method)) {
+        req.hasCheckMessages = false;
+      }
+      
+      openMessages.set(messageId, { 
+        req: {
+          body: req.body,
+          headers: req.headers,
+          ip: req.ip,
+          hasCheckMessages: req.hasCheckMessages,
+          get: req.get?.bind(req)
+        }, 
+        res, 
+        timestamp: Date.now(), 
+        rpcId: req.body.id 
+      });
       requestStartTimes.set(messageId, performance.now());
+    }
 
-      const modifiedMessage = {
-        ...req.body,
-        bgMessageId: messageId
-      };
+    const modifiedMessage = {
+      ...req.body,
+      bgMessageId: messageId
+    };
 
-      randomClient.ws.send(JSON.stringify(modifiedMessage));
+    randomClient.ws.send(JSON.stringify(modifiedMessage));
 
-      setTimeout(() => {
-        if (openMessages.has(messageId)) {
-          console.log('Timeout reached for message:', messageId);
-          const { res, rpcId } = openMessages.get(messageId);
-          res.status(504).json({
+    setTimeout(() => {
+      if (openMessages.has(messageId)) {
+        console.log('Timeout reached for message:', messageId);
+        const message = openMessages.get(messageId);
+        
+        // Only send error response if we have a res object (main request)
+        if (message.res) {
+          message.res.status(504).json({
             jsonrpc: "2.0",
-            id: rpcId,
+            id: message.rpcId,
             error: {
               code: -32603,
               message: "Gateway Timeout",
               data: "No response received from the node"
             }
           });
-          openMessages.delete(messageId);
         }
-      }, wsMessageTimeout);
-    } else if (methodsAcceptingBlockNumber.includes(req.body.method)) {
-      if (!openMessagesCheck || !requestStartTimesCheck) {
-        throw new Error('Check messages require openMessagesCheck and requestStartTimesCheck parameters');
+        openMessages.delete(messageId);
       }
-      // For check messages, don't include the res object
-      openMessagesCheck.set(messageId, { req, timestamp: Date.now(), rpcId: req.body.id });
-      requestStartTimesCheck.set(messageId, performance.now());
+    }, wsMessageTimeout);
 
-      // Convert largestBlockNumber to hex and ensure it has '0x' prefix
-      const blockNumberHex = largestBlockNumber ? '0x' + largestBlockNumber.toString(16) : null;
-
-      // Create modified message with params array
-      const checkModifiedMessage = {
-        ...req.body,
-        bgMessageId: messageId
-      };
-      
-      // Only modify params if the method accepts block number
-      if (methodsAcceptingBlockNumber.includes(req.body.method)) {
-        const blockNumberHex = largestBlockNumber ? '0x' + largestBlockNumber.toString(16) : null;
-        
-        // Handle different parameter structures
-        if (req.body.params && req.body.params.length > 0) {
-          const firstParam = req.body.params[0];
-          if (typeof firstParam === 'object' && firstParam !== null) {
-            // If first param is an object, only add blockNumber if it doesn't exist
-            if (!firstParam.hasOwnProperty('blockNumber')) {
-              checkModifiedMessage.params = [
-                { ...firstParam, blockNumber: blockNumberHex },
-                ...req.body.params.slice(1)
-              ];
-            }
-          } else {
-            // For array params, check if last param is a block tag or number
-            const lastParam = req.body.params[req.body.params.length - 1];
-            if (typeof lastParam === 'string' && 
-                (lastParam.startsWith('0x') || BLOCK_TAGS.includes(lastParam))) {
-              // Keep existing block parameter
-              checkModifiedMessage.params = [...req.body.params];
-            } else {
-              // Add block number if no block parameter exists
-              checkModifiedMessage.params = [...req.body.params, blockNumberHex];
-            }
-          }
-        } else {
-          // No parameters provided, add block number
-          checkModifiedMessage.params = [blockNumberHex];
-        }
-      }
-      
-      randomClient.ws.send(JSON.stringify(checkModifiedMessage));
-    }
+    // // Add flag to indicate if this request has check messages
+    // if (!isCheck && !isCheckB) {
+    //   req.hasCheckMessages = req.totalConnectedClients >= 3;
+    // }
   } catch (error) {
-    console.error("Error sending RPC request:", error);
-    const clientIp = req.ip || req.connection.remoteAddress;
-    const messageId = generateMessageId(req.body, clientIp);
-    
-    // Log the failed request
-    logRpcRequest(req, messageId, requestStartTimes, false, null, pendingMessageChecks);
-    
-    if (!isCheck) {
-      res.status(500).json({
-        jsonrpc: "2.0",
-        id: req.body.id,
-        error: {
-          code: -32603,
-          message: "Internal error",
-          data: error.message
-        }
-      });
-    }
+    console.error('Error sending RPC request:', error);
+    throw error;
   }
 }
 

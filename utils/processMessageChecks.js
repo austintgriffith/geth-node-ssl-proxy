@@ -197,44 +197,59 @@ const compareResponses = (response1, response2, messageId) => {
 };
 
 const processMessageChecks = (pendingMessageChecks) => {
-  // Get all message IDs from the map
-  const messageIds = Array.from(pendingMessageChecks.keys());
-  
-  // Filter for check messages (ending with '_')
-  const checkMessageIds = messageIds.filter(id => id.endsWith('_'));
-  
-  for (const checkMessageId of checkMessageIds) {
-    // Get the corresponding main message ID by removing the '_'
-    const mainMessageId = checkMessageId.slice(0, -1);
-    
-    // Get both messages from the map
-    const checkMessage = pendingMessageChecks.get(checkMessageId);
-    const mainMessage = pendingMessageChecks.get(mainMessageId);
-    
-    // Skip if either message involves the fallback URL
-    if (checkMessage?.peerId === fallbackUrl || mainMessage?.peerId === fallbackUrl) {
-      // Clean up these messages without logging
-      pendingMessageChecks.delete(checkMessageId);
-      pendingMessageChecks.delete(mainMessageId);
-      continue;
+  console.log('🚛  🚛  🚛  🚛  🚛');
+  console.log('processMessageChecks running...');
+  console.log('Current pendingMessageChecks size:', pendingMessageChecks.size);
+
+  // Group messages by their base ID
+  const messageGroups = new Map();
+  for (const [messageId, message] of pendingMessageChecks.entries()) {
+    const baseId = messageId.endsWith('_') || messageId.endsWith('!') 
+      ? messageId.slice(0, -1) 
+      : messageId;
+    if (!messageGroups.has(baseId)) {
+      messageGroups.set(baseId, new Set());
     }
-    
-    // Only process if we have both messages and neither involves fallback
-    if (checkMessage && mainMessage) {
-      // Compare responses using the new comparison function
-      const responsesMatch = compareResponses(
-        checkMessage.responseHash, 
-        mainMessage.responseHash,
-        mainMessageId
-      );
-      
-      // Log the comparison result to file
-      const logMessage = `${mainMessageId}|${mainMessage.peerId}|${checkMessage.peerId}|${responsesMatch}\n`;
-      fs.appendFileSync('rpcMessageChecks.log', logMessage);
-      
-      // Clean up processed messages
-      pendingMessageChecks.delete(checkMessageId);
-      pendingMessageChecks.delete(mainMessageId);
+    messageGroups.get(baseId).add(messageId);
+  }
+
+  // Process each group
+  for (const [baseId, messageIds] of messageGroups.entries()) {
+    if (messageIds.size === 3) {
+      // Process complete set of messages
+      const mainMessageId = baseId;
+      const checkMessageId = baseId + '_';
+      const checkMessageBId = baseId + '!';
+
+      const mainMessage = pendingMessageChecks.get(mainMessageId);
+      const checkMessage = pendingMessageChecks.get(checkMessageId);
+      const checkMessageB = pendingMessageChecks.get(checkMessageBId);
+
+      if (mainMessage && checkMessage && checkMessageB) {
+        console.log('Processing complete set of messages');
+        const matches12 = compareResponses(checkMessage.responseHash, mainMessage.responseHash, mainMessageId);
+        const matches23 = compareResponses(mainMessage.responseHash, checkMessageB.responseHash, mainMessageId);
+        const matches13 = compareResponses(checkMessage.responseHash, checkMessageB.responseHash, mainMessageId);
+
+        console.log('Comparison results:', { matches12, matches23, matches13 });
+
+        const responsesMatch = (matches12 && matches23) || (matches12 && matches13) || (matches23 && matches13);
+
+        const logMessage = `${mainMessageId}|${mainMessage.peerId}|${checkMessage.peerId}|${checkMessageB.peerId}|${responsesMatch}\n`;
+        fs.appendFileSync('rpcMessageChecks.log', logMessage);
+
+        console.log('Wrote to log file:', logMessage);
+
+        // Clean up processed messages
+        pendingMessageChecks.delete(mainMessageId);
+        pendingMessageChecks.delete(checkMessageId);
+        pendingMessageChecks.delete(checkMessageBId);
+      }
+    } else {
+      console.log(`Found incomplete message group for ${baseId}, cleaning up...`);
+      for (const messageId of messageIds) {
+        pendingMessageChecks.delete(messageId);
+      }
     }
   }
 };

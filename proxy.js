@@ -75,6 +75,9 @@ const requestStartTimes = new Map();
 const openMessagesCheck = new Map();
 const requestStartTimesCheck = new Map();
 
+const openMessagesCheckB = new Map();
+const requestStartTimesCheckB = new Map();
+
 const pendingMessageChecks = new Map();
 
 app.use(createPendingMessageChecksRouter(pendingMessageChecks));
@@ -107,6 +110,31 @@ server.listen(httpsPort, () => {
   console.log(`HTTPS and WebSocket server listening on port ${httpsPort}...`);
 });
 
+function getRandomClients(clientsArray) {
+  if (clientsArray.length < 3) {
+    return [clientsArray[0], null, null];
+  }
+  
+  // Create a copy of the array to avoid modifying the original
+  const available = [...clientsArray];
+  
+  // Get first random client
+  const randomIndex1 = Math.floor(Math.random() * available.length);
+  const client1 = available[randomIndex1];
+  available.splice(randomIndex1, 1);
+  
+  // Get second random client
+  const randomIndex2 = Math.floor(Math.random() * available.length);
+  const client2 = available[randomIndex2];
+  available.splice(randomIndex2, 1);
+  
+  // Get third random client
+  const randomIndex3 = Math.floor(Math.random() * available.length);
+  const client3 = available[randomIndex3];
+  
+  return [client1, client2, client3];
+}
+
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("--------------------------------------------------------");
   console.log("📡 RPC REQUEST", req.body);
@@ -127,35 +155,65 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
   await updateRequestOrigin(reqHost);
 
-  const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
-
-  if(filteredConnectedClients.size > 0) {
-    const clientsArray = Array.from(filteredConnectedClients.values());
-    const randomClient = clientsArray[Math.floor(Math.random() * clientsArray.length)];
-
-    let randomClientCheck;
-    if (clientsArray.length > 1) {
-      const remainingClients = clientsArray.filter(client => client.clientID !== randomClient.clientID);
-      if (remainingClients.length > 0) {
-        randomClientCheck = remainingClients[Math.floor(Math.random() * remainingClients.length)];
-      }
-    }
+  try {
+    const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(connectedClients);
     
-    if (randomClient && randomClient.ws) {
-      const originalMessageId = generateMessageId(req.body, req.ip || req.connection.remoteAddress);
-      sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, null, pendingMessageChecks, null);
+    if(filteredConnectedClients.size > 0) {
+      const clientsArray = Array.from(filteredConnectedClients.values());
+      req.totalConnectedClients = clientsArray.length;
+      
+      // Set hasCheckMessages flag BEFORE sending any requests
+      req.hasCheckMessages = clientsArray.length >= 3;
+      
+      // Get random clients for main and check requests
+      const [randomClient, randomClientCheck, randomClientCheckB] = getRandomClients(clientsArray);
 
-      // Send to second client if available
-      if (randomClientCheck && randomClientCheck.ws && randomClientCheck.clientID !== randomClient.clientID) {
-        sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId, pendingMessageChecks, largestBlockNumber);
+      if (randomClient && randomClient.ws) {
+        const originalMessageId = generateMessageId(req.body, req.ip || req.connection.remoteAddress);
+        
+        // Only send the main request if we have enough clients for checks
+        if (!randomClientCheck || !randomClientCheckB) {
+          // Not enough clients for checks, just send main request without adding to pendingMessageChecks
+          req.hasCheckMessages = false;
+          sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, originalMessageId, null, null);
+        } else {
+          // We have enough clients, send all requests
+          req.hasCheckMessages = true;
+          
+          // Send check requests first
+          console.log('Sending check request (_):', {
+            messageId: originalMessageId + '_',
+            client: randomClientCheck.clientID,
+            isCheck: true
+          });
+          sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId, pendingMessageChecks, largestBlockNumber);
+
+          console.log('Sending check request (!):', {
+            messageId: originalMessageId + '!',
+            client: randomClientCheckB.clientID,
+            isCheck: false
+          });
+          sendRpcRequestToClient(
+            req, res, randomClientCheckB, openMessagesCheckB,
+            requestStartTimesCheckB, wsMessageTimeout, false,
+            openMessagesCheck, requestStartTimesCheck,
+            originalMessageId, pendingMessageChecks,
+            largestBlockNumber, true, openMessagesCheckB,
+            requestStartTimesCheckB
+          );
+
+          // Now send the main request
+          sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, originalMessageId, pendingMessageChecks, null);
+        }
+      } else {
+        handleFallbackRequest(req, res, requestStartTimes, null);
       }
     } else {
-      // If no valid client, use fallback (no check request needed)
       handleFallbackRequest(req, res, requestStartTimes, null);
     }
-  } else {
-    // No clients connected, use fallback (no check request needed)
-    handleFallbackRequest(req, res, requestStartTimes, null);
+  } catch (error) {
+    console.error('Error processing request:', error);
+    handleFallbackRequest(req, res, requestStartTimes, error);
   }
 
   console.log("POST SERVED", req.body);
@@ -215,7 +273,18 @@ wss.on('connection', (ws) => {
         handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
         // console.log('Received checkin message');
       } else if (parsedMessage.jsonrpc === '2.0') {
-        await handleRpcResponseFromClient(parsedMessage, openMessages, connectedClients, client, requestStartTimes, openMessagesCheck, requestStartTimesCheck, pendingMessageChecks);
+        await handleRpcResponseFromClient(
+          parsedMessage, 
+          openMessages, 
+          connectedClients, 
+          client, 
+          requestStartTimes, 
+          openMessagesCheck, 
+          requestStartTimesCheck, 
+          openMessagesCheckB, 
+          requestStartTimesCheckB, 
+          pendingMessageChecks
+        );
       } else {
         console.log('Received message with unknown type:', parsedMessage);
       }
@@ -225,7 +294,29 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    console.log('WebSocket client disconnected');
+    console.log('WebSocket client disconnected:', client.clientID);
+    
+    // Clean up any pending messages from this client
+    for (const [messageId, message] of openMessages) {
+      if (message.req.handlingClient?.clientID === client.clientID) {
+        console.log(`Cleaning up pending message ${messageId} for disconnected client ${client.clientID}`);
+        openMessages.delete(messageId);
+      }
+    }
+    
+    // Also clean up check messages
+    for (const [messageId, message] of openMessagesCheck) {
+      if (message.req.handlingClient?.clientID === client.clientID) {
+        openMessagesCheck.delete(messageId);
+      }
+    }
+    
+    for (const [messageId, message] of openMessagesCheckB) {
+      if (message.req.handlingClient?.clientID === client.clientID) {
+        openMessagesCheckB.delete(messageId);
+      }
+    }
+    
     connectedClients.delete(client);
   });
 });
@@ -252,7 +343,7 @@ checkForFallback();
 setInterval(() => cleanupOpenMessages(openMessages, messageCleanupInterval), messageCleanupInterval);
 
 // Process message checks every 10 seconds
-setInterval(() => processMessageChecks(pendingMessageChecks), 10000);
+setInterval(() => processMessageChecks(pendingMessageChecks), 20000);
 
 // Set up an interval to check for pending message checks, compare results, and log results
 
@@ -260,5 +351,10 @@ module.exports = {
   app,
   connectedClients,
   openMessages,
-  requestStartTimes
+  requestStartTimes,
+  openMessagesCheck,
+  requestStartTimesCheck,
+  openMessagesCheckB,
+  requestStartTimesCheckB,
+  pendingMessageChecks
 };
