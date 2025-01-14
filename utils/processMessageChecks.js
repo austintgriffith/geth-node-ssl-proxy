@@ -197,121 +197,59 @@ const compareResponses = (response1, response2, messageId) => {
 };
 
 const processMessageChecks = (pendingMessageChecks) => {
-  console.log('🚛  🚛  🚛  🚛  🚛')
+  console.log('🚛  🚛  🚛  🚛  🚛');
   console.log('processMessageChecks running...');
-
-    // First, group all messages by their base ID (without suffixes)
-    const messageGroups = new Map();
-  
-    for (const [messageId, message] of pendingMessageChecks.entries()) {
-      const baseId = messageId.endsWith('_') || messageId.endsWith('!') 
-        ? messageId.slice(0, -1) 
-        : messageId;
-        
-      if (!messageGroups.has(baseId)) {
-        messageGroups.set(baseId, new Set());
-      }
-      messageGroups.get(baseId).add(messageId);
-    }
-    
-    // Clean up any incomplete message groups
-    for (const [baseId, messageIds] of messageGroups.entries()) {
-      // A complete group should have exactly 3 messages:
-      // baseId, baseId_, baseId!
-      if (messageIds.size !== 3) {
-        console.log(`Found incomplete message group for ${baseId}, cleaning up...`);
-        // Delete all messages in this incomplete group
-        for (const messageId of messageIds) {
-          pendingMessageChecks.delete(messageId);
-        }
-      }
-    }
-    
   console.log('Current pendingMessageChecks size:', pendingMessageChecks.size);
-  
-  // First, get all main messages that don't have corresponding check messages
-  const messageIds = Array.from(pendingMessageChecks.keys());
-  const mainMessageIds = messageIds.filter(id => !id.endsWith('_') && !id.endsWith('!'));
-  
-  // Clean up orphaned main messages
-  for (const mainMessageId of mainMessageIds) {
-    const hasCheckMessage = pendingMessageChecks.has(mainMessageId + '_');
-    const hasCheckMessageB = pendingMessageChecks.has(mainMessageId + '!');
-    
-    // If this main message doesn't have both check messages, delete it
-    if (!hasCheckMessage || !hasCheckMessageB) {
-      console.log(`Cleaning up orphaned main message: ${mainMessageId}`);
-      pendingMessageChecks.delete(mainMessageId);
-      continue;
+
+  // Group messages by their base ID
+  const messageGroups = new Map();
+  for (const [messageId, message] of pendingMessageChecks.entries()) {
+    const baseId = messageId.endsWith('_') || messageId.endsWith('!') 
+      ? messageId.slice(0, -1) 
+      : messageId;
+    if (!messageGroups.has(baseId)) {
+      messageGroups.set(baseId, new Set());
     }
+    messageGroups.get(baseId).add(messageId);
   }
 
-  // Now process check messages as before
-  const checkMessageIds = messageIds.filter(id => id.endsWith('_') || id.endsWith('!'));
-  console.log('Filtered check message IDs:', checkMessageIds);
-  
-  const processedIds = new Set();
-  for (const checkMessageId of checkMessageIds) {
-    // Skip if we've already processed this message's group
-    const mainMessageId = checkMessageId.slice(0, -1);
-    if (processedIds.has(mainMessageId)) {
-      continue;
-    }
+  // Process each group
+  for (const [baseId, messageIds] of messageGroups.entries()) {
+    if (messageIds.size === 3) {
+      // Process complete set of messages
+      const mainMessageId = baseId;
+      const checkMessageId = baseId + '_';
+      const checkMessageBId = baseId + '!';
 
-    // Get all related messages
-    const mainMessage = pendingMessageChecks.get(mainMessageId);
-    const checkMessage = pendingMessageChecks.get(mainMessageId + '_');
-    const checkMessageB = pendingMessageChecks.get(mainMessageId + '!');
-    
-    // Log the actual message contents for debugging
-    console.log('Found messages:', {
-      checkMessage: checkMessage ? `present (${checkMessage.peerId})` : 'missing',
-      mainMessage: mainMessage ? `present (${mainMessage.peerId})` : 'missing',
-      checkMessageB: checkMessageB ? `present (${checkMessageB.peerId})` : 'missing'
-    });
+      const mainMessage = pendingMessageChecks.get(mainMessageId);
+      const checkMessage = pendingMessageChecks.get(checkMessageId);
+      const checkMessageB = pendingMessageChecks.get(checkMessageBId);
 
-    // Skip if any message involves the fallback URL or if any nodes are duplicated
-    if (checkMessage?.peerId === fallbackUrl || 
-        mainMessage?.peerId === fallbackUrl || 
-        checkMessageB?.peerId === fallbackUrl ||
-        checkMessage?.peerId === checkMessageB?.peerId || // Check for duplicates
-        mainMessage?.peerId === checkMessage?.peerId ||
-        mainMessage?.peerId === checkMessageB?.peerId) {
-      console.log('Skipping due to fallback URL or duplicate nodes');
-      pendingMessageChecks.delete(checkMessageId);
-      pendingMessageChecks.delete(mainMessageId);
-      pendingMessageChecks.delete(mainMessageId + '!');
-      continue;
-    }
-    
-    // Only process if we have all three messages
-    if (checkMessage && mainMessage && checkMessageB) {
-      console.log('Processing complete set of messages');
-      // Compare responses between all three clients
-      const matches12 = compareResponses(checkMessage.responseHash, mainMessage.responseHash, mainMessageId);
-      const matches23 = compareResponses(mainMessage.responseHash, checkMessageB.responseHash, mainMessageId);
-      const matches13 = compareResponses(checkMessage.responseHash, checkMessageB.responseHash, mainMessageId);
-      
-      console.log('Comparison results:', { matches12, matches23, matches13 });
-      
-      // Consider it a match if at least two comparisons match
-      const responsesMatch = (matches12 && matches23) || (matches12 && matches13) || (matches23 && matches13);
-      
-      // Log the comparison result
-      const logMessage = `${mainMessageId}|${mainMessage.peerId}|${checkMessage.peerId}|${checkMessageB.peerId}|${responsesMatch}\n`;
-      fs.appendFileSync('rpcMessageChecks.log', logMessage);
-      
-      console.log('Wrote to log file:', logMessage);
-      
-      // Clean up processed messages
-      pendingMessageChecks.delete(checkMessageId);
-      pendingMessageChecks.delete(mainMessageId);
-      pendingMessageChecks.delete(mainMessageId + '!');
+      if (mainMessage && checkMessage && checkMessageB) {
+        console.log('Processing complete set of messages');
+        const matches12 = compareResponses(checkMessage.responseHash, mainMessage.responseHash, mainMessageId);
+        const matches23 = compareResponses(mainMessage.responseHash, checkMessageB.responseHash, mainMessageId);
+        const matches13 = compareResponses(checkMessage.responseHash, checkMessageB.responseHash, mainMessageId);
 
-      // After successful processing
-      processedIds.add(mainMessageId);
+        console.log('Comparison results:', { matches12, matches23, matches13 });
+
+        const responsesMatch = (matches12 && matches23) || (matches12 && matches13) || (matches23 && matches13);
+
+        const logMessage = `${mainMessageId}|${mainMessage.peerId}|${checkMessage.peerId}|${checkMessageB.peerId}|${responsesMatch}\n`;
+        fs.appendFileSync('rpcMessageChecks.log', logMessage);
+
+        console.log('Wrote to log file:', logMessage);
+
+        // Clean up processed messages
+        pendingMessageChecks.delete(mainMessageId);
+        pendingMessageChecks.delete(checkMessageId);
+        pendingMessageChecks.delete(checkMessageBId);
+      }
     } else {
-      console.log('Incomplete set of messages, waiting for more responses');
+      console.log(`Found incomplete message group for ${baseId}, cleaning up...`);
+      for (const messageId of messageIds) {
+        pendingMessageChecks.delete(messageId);
+      }
     }
   }
 };

@@ -10,7 +10,7 @@ router.get('/dashboard', (req, res) => {
   // Read both log files in parallel
   Promise.all([
     new Promise((resolve, reject) => {
-      fs.readFile(path.join(__dirname, '../rpcRequests.log'), 'utf8', (err, data) => {
+      fs.readFile(path.join(__dirname, '../rpcRequestsMain.log'), 'utf8', (err, data) => {
         if (err) reject(err);
         else resolve(data);
       });
