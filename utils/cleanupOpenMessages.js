@@ -1,4 +1,6 @@
-function cleanupOpenMessages(openMessages, messageCleanupInterval) {
+const { openMessages } = require('../globalState');
+
+function cleanupOpenMessages(messageCleanupInterval) {
   const now = Date.now();
   for (const [id, message] of openMessages) {
     if (now - message.timestamp > messageCleanupInterval) { // 1 minute timeout

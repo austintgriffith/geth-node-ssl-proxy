@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { fallbackUrl } = require('../config');
+const { pendingMessageChecks } = require('../globalState');
 
 const truncateValue = (value, maxLength = 100) => {
   const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
@@ -196,7 +197,7 @@ const compareResponses = (response1, response2, messageId) => {
   }
 };
 
-const processMessageChecks = (pendingMessageChecks) => {
+const processMessageChecks = () => {
   console.log('🚛  🚛  🚛  🚛  🚛');
   console.log('processMessageChecks running...');
   console.log('Current pendingMessageChecks size:', pendingMessageChecks.size);

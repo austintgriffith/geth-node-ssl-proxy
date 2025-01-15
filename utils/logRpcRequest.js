@@ -41,22 +41,25 @@ function logRpcRequest(req, messageId, success, response = null) {
     }).join(',');
   }
   
-  logEntry += `|${duration.toFixed(3)}|${messageId}|${success}`;
+  logEntry += `|${duration.toFixed(3)}|${messageId}`;
 
-  let responseHash = null;
-  // Add response data if available
+  let responseResult = '';
   if (response) {
-    // DON'T DELETE THIS COMMENTED CODE!
-    // const hash = crypto.createHash('sha256');
-    // hash.update(JSON.stringify(response));
-    // responseHash = hash.digest('hex');
-    // logEntry += `|${responseHash}`;
-
-    responseHash = typeof response === 'object' ? JSON.stringify(response) : response;
-    logEntry += `|${responseHash}`;
+    if (response instanceof Map) {
+      responseResult = JSON.stringify(Object.fromEntries(response));
+    } else if (typeof response === 'object' && response !== null) {
+      responseResult = response.result || response;
+    } else {
+      responseResult = response;
+    }
+  }
+  
+  // Convert responseResult to a string if it's an object, but avoid double quotes for strings
+  if (typeof responseResult === 'object') {
+    responseResult = JSON.stringify(responseResult);
   }
 
-  logEntry += '\n';
+  logEntry += `|${success}|${responseResult}\n`;
   
   // Determine which log file to write to based on message ID
   const logFile = messageId.endsWith('_') ? 'rpcRequestsCheck.log' : 
@@ -71,11 +74,15 @@ function logRpcRequest(req, messageId, success, response = null) {
 
   // Add to pendingMessageChecks if this is a successful request
   // and this is not a fallback request and it's either a check message or has corresponding check messages
-  if (success && responseHash && req.handlingClient !== null) {
+  if (success && response && req.handlingClient !== null) {
     const isCheckMessage = messageId.endsWith('_') || messageId.endsWith('!');
     
     // Only add if it's a check message OR if it's a main message that we know had check messages sent
     if (isCheckMessage || req.hasCheckMessages) {
+      let responseHash = response instanceof Map ? 
+        JSON.stringify({ result: response.get('result') }) :
+        (typeof response === 'object' ? JSON.stringify(response) : response);
+
       pendingMessageChecks.set(messageId, {
         peerId: req.handlingClient.nodeStatusId,
         messageId: messageId,

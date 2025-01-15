@@ -69,7 +69,7 @@ async function handleRpcResponseFromClient(parsedMessage, connectedClients, clie
       openMessage.req.handlingClient = handlingClient;
 
       // Log the RPC request with timing information
-      logRpcRequest(openMessage.req, messageId, requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
+      logRpcRequest(openMessage.req, messageId, true, parsedMessage.result);
 
       // Increment n_rpc_requests for the client that served the request
       await incrementRpcRequests(client.clientID);
@@ -87,7 +87,7 @@ async function handleRpcResponseFromClient(parsedMessage, connectedClients, clie
     // Add client info to the request object for check messages
     openMessage.req.handlingClient = handlingClient;
     
-    logRpcRequest(openMessage.req, messageId, requestStartTimesCheck || requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
+    logRpcRequest(openMessage.req, messageId, true, parsedMessage.result);
     openMessagesCheck.delete(messageId);
   } else if (messageId && openMessagesCheckB && openMessagesCheckB.has(messageId)) {
     console.log(`Logging response for check message B with id ${messageId}`);
@@ -98,7 +98,7 @@ async function handleRpcResponseFromClient(parsedMessage, connectedClients, clie
     // Important: Don't modify the messageId, use it as is
     console.log('Check B message ID before logging:', messageId);
     
-    logRpcRequest(openMessage.req, messageId, requestStartTimesCheckB || requestStartTimes, true, parsedMessage.result, pendingMessageChecks);
+    logRpcRequest(openMessage.req, messageId, true, parsedMessage.result);
     openMessagesCheckB.delete(messageId);
   } else {
     console.log(`No open message found for id ${messageId}. This might be a delayed response.`);

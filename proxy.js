@@ -55,7 +55,7 @@ const blockRouter = require('./routes/block');
 const syncRouter = require('./routes/sync');
 const checkinRouter = require('./routes/checkin');
 const dashboardRouter = require('./routes/dashboard');
-const createPendingMessageChecksRouter = require('./routes/listpendingmessagechecks');
+const listPendingMessageChecksRouter = require('./routes/listpendingmessagechecks');
 
 app.use(nodeContinentsRouter);
 app.use(requestOriginsRouter);
@@ -74,12 +74,11 @@ app.use(blockRouter);
 app.use(syncRouter);
 app.use(checkinRouter);
 app.use(dashboardRouter);
+app.use(listPendingMessageChecksRouter);
 
 EventEmitter.defaultMaxListeners = 20;
 
 const connectedClients = new Set();
-
-app.use(createPendingMessageChecksRouter(pendingMessageChecks));
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -324,10 +323,10 @@ wss.on('close', () => {
 setInterval(checkForFallback, 5000);
 checkForFallback();
 
-setInterval(() => cleanupOpenMessages(openMessages, messageCleanupInterval), messageCleanupInterval);
+setInterval(() => cleanupOpenMessages(messageCleanupInterval), messageCleanupInterval);
 
-// Process message checks every 10 seconds
-setInterval(() => processMessageChecks(pendingMessageChecks), 20000);
+// Process message checks every 20 seconds
+setInterval(processMessageChecks, 20000);
 
 // Set up an interval to check for pending message checks, compare results, and log results
 
