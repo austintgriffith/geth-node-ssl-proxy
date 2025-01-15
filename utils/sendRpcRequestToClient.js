@@ -1,6 +1,15 @@
 const { generateMessageId } = require('./generateMessageId');
 const { logRpcRequest } = require('./logRpcRequest');
 const { performance } = require('perf_hooks');
+const {
+  openMessages,
+  requestStartTimes,
+  openMessagesCheck,
+  requestStartTimesCheck,
+  openMessagesCheckB,
+  requestStartTimesCheckB,
+  pendingMessageChecks
+} = require('../globalState');
 
 const methodsAcceptingBlockNumber = [
   'eth_getBalance',
@@ -18,7 +27,16 @@ const methodsAcceptingBlockNumber = [
 
 const BLOCK_TAGS = ['latest', 'pending', 'earliest'];
 
-function sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, isCheck = false, openMessagesCheck = null, requestStartTimesCheck = null, originalMessageId = null, pendingMessageChecks = null, largestBlockNumber = null, isCheckB = false, openMessagesCheckB = null, requestStartTimesCheckB = null) {
+function sendRpcRequestToClient(
+  req, 
+  res, 
+  randomClient, 
+  wsMessageTimeout, 
+  isCheck = false, 
+  originalMessageId = null, 
+  largestBlockNumber = null, 
+  isCheckB = false
+) {
   try {
     // Generate message ID with appropriate suffix
     const messageId = isCheck ? originalMessageId + '_' : 

@@ -2,8 +2,9 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { performance } = require('perf_hooks');
 const { fallbackUrl } = require('../config');
+const { requestStartTimes, pendingMessageChecks } = require('../globalState');
 
-function logRpcRequest(req, messageId, requestStartTimes, success, response = null, pendingMessageChecks = null) {
+function logRpcRequest(req, messageId, success, response = null) {
   const { method, params } = req.body;
   const startTime = requestStartTimes.get(messageId);
   const endTime = performance.now();
@@ -68,9 +69,9 @@ function logRpcRequest(req, messageId, requestStartTimes, success, response = nu
     }
   });
 
-  // Add to pendingMessageChecks if it's provided and this is a successful request
+  // Add to pendingMessageChecks if this is a successful request
   // and this is not a fallback request and it's either a check message or has corresponding check messages
-  if (pendingMessageChecks && success && responseHash && req.handlingClient !== null) {
+  if (success && responseHash && req.handlingClient !== null) {
     const isCheckMessage = messageId.endsWith('_') || messageId.endsWith('!');
     
     // Only add if it's a check message OR if it's a main message that we know had check messages sent

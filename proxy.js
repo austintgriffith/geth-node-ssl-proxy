@@ -28,6 +28,16 @@ const {
   messageCleanupInterval 
 } = require('./config');
 
+const { 
+  openMessages,
+  requestStartTimes,
+  openMessagesCheck,
+  requestStartTimesCheck,
+  openMessagesCheckB,
+  requestStartTimesCheckB,
+  pendingMessageChecks
+} = require('./globalState');
+
 const nodeContinentsRouter = require('./routes/nodecontinents');
 const requestOriginsRouter = require('./routes/requestorigins');
 const iplocationsRouter = require('./routes/iplocations');
@@ -68,17 +78,6 @@ app.use(dashboardRouter);
 EventEmitter.defaultMaxListeners = 20;
 
 const connectedClients = new Set();
-
-const openMessages = new Map();
-const requestStartTimes = new Map();
-
-const openMessagesCheck = new Map();
-const requestStartTimesCheck = new Map();
-
-const openMessagesCheckB = new Map();
-const requestStartTimesCheckB = new Map();
-
-const pendingMessageChecks = new Map();
 
 app.use(createPendingMessageChecksRouter(pendingMessageChecks));
 
@@ -173,9 +172,9 @@ app.post("/", validateRpcRequest, async (req, res) => {
         
         // Only send the main request if we have enough clients for checks
         if (!randomClientCheck || !randomClientCheckB) {
-          // Not enough clients for checks, just send main request without adding to pendingMessageChecks
+          // Not enough clients for checks, just send main request
           req.hasCheckMessages = false;
-          sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, originalMessageId, null, null);
+          sendRpcRequestToClient(req, res, randomClient, wsMessageTimeout, false, originalMessageId);
         } else {
           // We have enough clients, send all requests
           req.hasCheckMessages = true;
@@ -186,7 +185,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
             client: randomClientCheck.clientID,
             isCheck: true
           });
-          sendRpcRequestToClient(req, res, randomClientCheck, openMessagesCheck, requestStartTimesCheck, wsMessageTimeout, true, openMessagesCheck, requestStartTimesCheck, originalMessageId, pendingMessageChecks, largestBlockNumber);
+          sendRpcRequestToClient(req, res, randomClientCheck, wsMessageTimeout, true, originalMessageId, largestBlockNumber);
 
           console.log('Sending check request (!):', {
             messageId: originalMessageId + '!',
@@ -194,26 +193,22 @@ app.post("/", validateRpcRequest, async (req, res) => {
             isCheck: false
           });
           sendRpcRequestToClient(
-            req, res, randomClientCheckB, openMessagesCheckB,
-            requestStartTimesCheckB, wsMessageTimeout, false,
-            openMessagesCheck, requestStartTimesCheck,
-            originalMessageId, pendingMessageChecks,
-            largestBlockNumber, true, openMessagesCheckB,
-            requestStartTimesCheckB
+            req, res, randomClientCheckB, wsMessageTimeout, false,
+            originalMessageId, largestBlockNumber, true
           );
 
           // Now send the main request
-          sendRpcRequestToClient(req, res, randomClient, openMessages, requestStartTimes, wsMessageTimeout, false, null, null, originalMessageId, pendingMessageChecks, null);
+          sendRpcRequestToClient(req, res, randomClient, wsMessageTimeout, false, originalMessageId);
         }
       } else {
-        handleFallbackRequest(req, res, requestStartTimes, null);
+        handleFallbackRequest(req, res);
       }
     } else {
-      handleFallbackRequest(req, res, requestStartTimes, null);
+      handleFallbackRequest(req, res);
     }
   } catch (error) {
     console.error('Error processing request:', error);
-    handleFallbackRequest(req, res, requestStartTimes, error);
+    handleFallbackRequest(req, res);
   }
 
   console.log("POST SERVED", req.body);
@@ -273,18 +268,7 @@ wss.on('connection', (ws) => {
         handleWebSocketCheckin(ws, JSON.stringify(parsedMessage.params));
         // console.log('Received checkin message');
       } else if (parsedMessage.jsonrpc === '2.0') {
-        await handleRpcResponseFromClient(
-          parsedMessage, 
-          openMessages, 
-          connectedClients, 
-          client, 
-          requestStartTimes, 
-          openMessagesCheck, 
-          requestStartTimesCheck, 
-          openMessagesCheckB, 
-          requestStartTimesCheckB, 
-          pendingMessageChecks
-        );
+        await handleRpcResponseFromClient(parsedMessage, connectedClients, client);
       } else {
         console.log('Received message with unknown type:', parsedMessage);
       }
@@ -349,12 +333,5 @@ setInterval(() => processMessageChecks(pendingMessageChecks), 20000);
 
 module.exports = {
   app,
-  connectedClients,
-  openMessages,
-  requestStartTimes,
-  openMessagesCheck,
-  requestStartTimesCheck,
-  openMessagesCheckB,
-  requestStartTimesCheckB,
-  pendingMessageChecks
+  connectedClients
 };

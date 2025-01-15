@@ -4,8 +4,9 @@ const https = require("https");
 const axios = require("axios");
 const { performance } = require('perf_hooks');
 const { fallbackUrl } = require('../config');
+const { requestStartTimes, pendingMessageChecks } = require('../globalState');
 
-async function handleFallbackRequest(req, res, requestStartTimes, pendingMessageChecks) {
+async function handleFallbackRequest(req, res) {
   console.log("NO CLIENTS CONNECTED, using fallback mechanism");
   try {
     const clientIp = req.ip || req.connection.remoteAddress;
@@ -17,7 +18,7 @@ async function handleFallbackRequest(req, res, requestStartTimes, pendingMessage
     
     // Log the RPC request with timing information
     req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
-    logRpcRequest(req, messageId, requestStartTimes, true, result, null);
+    logRpcRequest(req, messageId, true, result);
     
     // Explicitly ensure no check message is created for fallback requests
     if (pendingMessageChecks instanceof Map) {
@@ -30,7 +31,7 @@ async function handleFallbackRequest(req, res, requestStartTimes, pendingMessage
     const messageId = generateMessageId(req.body, clientIp);
     
     req.handlingClient = null;
-    logRpcRequest(req, messageId, requestStartTimes, false, null, null);
+    logRpcRequest(req, messageId, false, null);
     
     // Also ensure no check message in error case
     if (pendingMessageChecks instanceof Map) {
