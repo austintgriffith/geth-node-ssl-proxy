@@ -4,10 +4,6 @@ const { performance } = require('perf_hooks');
 const {
   openMessages,
   requestStartTimes,
-  openMessagesCheck,
-  requestStartTimesCheck,
-  openMessagesCheckB,
-  requestStartTimesCheckB,
   pendingMessageChecks
 } = require('../globalState');
 
@@ -53,25 +49,17 @@ function sendRpcRequestToClient(
       if (mainMessage) {
         mainMessage.req.hasCheckMessages = false;
       }
-      // Important: Also notify the other check message if it exists
-      if (isCheck && openMessagesCheckB) {
-        openMessagesCheckB.delete(originalMessageId + '!');
-      } else if (isCheckB && openMessagesCheck) {
-        openMessagesCheck.delete(originalMessageId + '_');
-      }
       return;
     }
 
-    // For check messages, ensure we're using the correct message stores
+    // For main messages, only set hasCheckMessages if method accepts block number
+    if (!methodsAcceptingBlockNumber.includes(req.body.method)) {
+      req.hasCheckMessages = false;
+    }
+    
+    // Store message in openMessages map
     if (isCheck || isCheckB) {
-      const targetOpenMessages = isCheckB ? openMessagesCheckB : openMessagesCheck;
-      const targetRequestStartTimes = isCheckB ? requestStartTimesCheckB : requestStartTimesCheck;
-
-      if (!targetOpenMessages || !targetRequestStartTimes) {
-        throw new Error(`${isCheckB ? 'Check B' : 'Check A'} messages require corresponding openMessages and requestStartTimes parameters`);
-      }
-
-      targetOpenMessages.set(messageId, { 
+      openMessages.set(messageId, { 
         req: {
           body: req.body,
           headers: req.headers,
@@ -82,13 +70,7 @@ function sendRpcRequestToClient(
         timestamp: Date.now(), 
         rpcId: req.body.id 
       });
-      targetRequestStartTimes.set(messageId, performance.now());
     } else {
-      // For main messages, only set hasCheckMessages if method accepts block number
-      if (!methodsAcceptingBlockNumber.includes(req.body.method)) {
-        req.hasCheckMessages = false;
-      }
-      
       openMessages.set(messageId, { 
         req: {
           body: req.body,
@@ -101,8 +83,8 @@ function sendRpcRequestToClient(
         timestamp: Date.now(), 
         rpcId: req.body.id 
       });
-      requestStartTimes.set(messageId, performance.now());
     }
+    requestStartTimes.set(messageId, performance.now());
 
     const modifiedMessage = {
       ...req.body,

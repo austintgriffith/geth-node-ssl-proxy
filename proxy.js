@@ -31,10 +31,6 @@ const {
 const { 
   openMessages,
   requestStartTimes,
-  openMessagesCheck,
-  requestStartTimesCheck,
-  openMessagesCheckB,
-  requestStartTimesCheckB,
   pendingMessageChecks
 } = require('./globalState');
 
@@ -284,19 +280,6 @@ wss.on('connection', (ws) => {
       if (message.req.handlingClient?.clientID === client.clientID) {
         console.log(`Cleaning up pending message ${messageId} for disconnected client ${client.clientID}`);
         openMessages.delete(messageId);
-      }
-    }
-    
-    // Also clean up check messages
-    for (const [messageId, message] of openMessagesCheck) {
-      if (message.req.handlingClient?.clientID === client.clientID) {
-        openMessagesCheck.delete(messageId);
-      }
-    }
-    
-    for (const [messageId, message] of openMessagesCheckB) {
-      if (message.req.handlingClient?.clientID === client.clientID) {
-        openMessagesCheckB.delete(messageId);
       }
     }
     
