@@ -28,11 +28,7 @@ const {
   messageCleanupInterval 
 } = require('./config');
 
-const { 
-  openMessages,
-  requestStartTimes,
-  pendingMessageChecks
-} = require('./globalState');
+const { openMessages } = require('./globalState');
 
 const nodeContinentsRouter = require('./routes/nodecontinents');
 const requestOriginsRouter = require('./routes/requestorigins');

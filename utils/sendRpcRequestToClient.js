@@ -1,10 +1,8 @@
 const { generateMessageId } = require('./generateMessageId');
-const { logRpcRequest } = require('./logRpcRequest');
 const { performance } = require('perf_hooks');
 const {
   openMessages,
   requestStartTimes,
-  pendingMessageChecks
 } = require('../globalState');
 
 const methodsAcceptingBlockNumber = [

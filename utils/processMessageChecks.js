@@ -1,5 +1,4 @@
 const fs = require('fs');
-const { fallbackUrl } = require('../config');
 const { pendingMessageChecks } = require('../globalState');
 
 const truncateValue = (value, maxLength = 100) => {

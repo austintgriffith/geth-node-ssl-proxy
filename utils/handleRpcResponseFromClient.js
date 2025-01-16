@@ -3,11 +3,7 @@ const { logRpcRequest } = require('./logRpcRequest');
 const { incrementRpcRequests } = require('../database_scripts/incrementRpcRequests');
 const { getOwnerForClientId } = require('./getOwnerForClientId');
 const { incrementOwnerPoints } = require('../database_scripts/incrementOwnerPoints');
-const {
-  openMessages,
-  requestStartTimes,
-  pendingMessageChecks
-} = require('../globalState');
+const { openMessages } = require('../globalState');
 
 async function handleRpcResponseFromClient(parsedMessage, connectedClients, client) {
   const messageId = parsedMessage.bgMessageId;
