@@ -56,6 +56,35 @@ function sendRpcRequestToClient(
     if (!methodsAcceptingBlockNumber.includes(req.body.method)) {
       req.hasCheckMessages = false;
     }
+
+    // For check messages, ensure we use the same block number as the main request
+    if ((isCheck || isCheckB) && methodsAcceptingBlockNumber.includes(req.body.method)) {
+      const mainMessage = openMessages.get(originalMessageId);
+      if (mainMessage) {
+        const mainParams = mainMessage.req.body.params;
+        // If main request specified a block number parameter, use it
+        if (mainParams && mainParams.length > 0) {
+          const blockParam = mainParams.find(param => typeof param === 'string' && (param.startsWith('0x') || BLOCK_TAGS.includes(param)));
+          if (blockParam) {
+            // If main request used 'latest', use the largestBlockNumber instead for checks
+            if (blockParam === 'latest' && largestBlockNumber) {
+              const blockNumberHex = '0x' + largestBlockNumber.toString(16);
+              // Find and replace the block number parameter
+              const paramIndex = mainParams.indexOf(blockParam);
+              if (paramIndex !== -1) {
+                req.body.params[paramIndex] = blockNumberHex;
+              }
+            } else {
+              // Use the exact same block number as main request
+              const paramIndex = mainParams.indexOf(blockParam);
+              if (paramIndex !== -1) {
+                req.body.params[paramIndex] = blockParam;
+              }
+            }
+          }
+        }
+      }
+    }
     
     // Store message in openMessages map
     if (isCheck || isCheckB) {
@@ -113,11 +142,6 @@ function sendRpcRequestToClient(
         openMessages.delete(messageId);
       }
     }, wsMessageTimeout);
-
-    // // Add flag to indicate if this request has check messages
-    // if (!isCheck && !isCheckB) {
-    //   req.hasCheckMessages = req.totalConnectedClients >= 3;
-    // }
   } catch (error) {
     console.error('Error sending RPC request:', error);
     throw error;
