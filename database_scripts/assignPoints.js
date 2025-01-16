@@ -1,4 +1,4 @@
-const { getDbPool } = require('../utils/dbUtils');
+const { getDbPool, endPool } = require('../utils/dbUtils');
 require('dotenv').config();
 
 async function assignPoints() {
@@ -44,10 +44,17 @@ async function assignPoints() {
   } catch (err) {
     console.error('Error assigning points:', err);
   } finally {
-    if (pool) {
-      await pool.end();
+    // Only end the pool if this script is being run directly
+    if (require.main === module) {
+      await endPool();
     }
   }
 }
 
+// Only run if this script is being run directly
+if (require.main === module) {
+  assignPoints();
+}
+
+module.exports = { assignPoints };
 assignPoints();

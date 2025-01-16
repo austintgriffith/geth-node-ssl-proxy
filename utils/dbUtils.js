@@ -44,13 +44,22 @@ async function getDbConfig() {
 // curl -o rds-ca-2019-root.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 
 async function getDbPool() {
-  if (!pool) {
+  // Check if pool exists and is not ended
+  if (!pool || pool.ended) {
     const dbConfig = await getDbConfig();
     pool = new Pool(dbConfig);
   }
   return pool;
 }
 
+// Function to safely end the pool - only use in scripts, not in the main application
+async function endPool() {
+  if (pool && !pool.ended) {
+    await pool.end();
+  }
+}
+
 module.exports = {
-  getDbPool
+  getDbPool,
+  endPool
 };
