@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { getDbPool } = require('./dbUtils');
 const { pendingMessageChecks } = require('../globalState');
 
 const truncateValue = (value, maxLength = 100) => {
@@ -196,10 +197,12 @@ const compareResponses = (response1, response2, messageId) => {
   }
 };
 
-const processMessageChecks = () => {
+const processMessageChecks = async () => {
   console.log('🚛  🚛  🚛  🚛  🚛');
   console.log('processMessageChecks running...');
   console.log('Current pendingMessageChecks size:', pendingMessageChecks.size);
+
+  const pool = await getDbPool();
 
   // Group messages by their base ID
   const messageGroups = new Map();
@@ -235,6 +238,32 @@ const processMessageChecks = () => {
 
         const responsesMatch = (matches12 && matches23) || (matches12 && matches13) || (matches23 && matches13);
 
+        // Determine which node disagreed if exactly two nodes agree
+        let failedNodeId = null;
+        if (matches12 && !matches23 && !matches13) {
+          failedNodeId = checkMessageB.peerId; // Node B disagrees with A and check
+        } else if (matches23 && !matches12 && !matches13) {
+          failedNodeId = checkMessage.peerId; // Check node disagrees with A and B
+        } else if (matches13 && !matches12 && !matches23) {
+          failedNodeId = mainMessage.peerId; // Node A disagrees with check and B
+        }
+
+        // Update failed checks in database if we found a disagreeing node
+        if (failedNodeId) {
+          try {
+            await pool.query(
+              `INSERT INTO node_failed_checks (node_id, n_failed_checks) 
+               VALUES ($1, 1)
+               ON CONFLICT (node_id) 
+               DO UPDATE SET n_failed_checks = node_failed_checks.n_failed_checks + 1`,
+              [failedNodeId]
+            );
+            console.log(`Updated failed checks for node ${failedNodeId}`);
+          } catch (error) {
+            console.error('Error updating node_failed_checks:', error);
+          }
+        }
+
         const logMessage = `${mainMessageId}|${mainMessage.peerId}|${checkMessage.peerId}|${checkMessageB.peerId}|${responsesMatch}\n`;
         fs.appendFileSync('rpcMessageChecks.log', logMessage);
 
@@ -252,6 +281,8 @@ const processMessageChecks = () => {
       }
     }
   }
+  
+  await pool.end();
 };
 
 module.exports = { processMessageChecks }; 
