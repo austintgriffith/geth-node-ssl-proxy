@@ -48,10 +48,24 @@ async function getDbConfig() {
 // curl -o rds-ca-2019-root.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 
 async function getDbPool() {
-  // Check if pool exists and is not ended
-  if (!pool || pool.ended) {
-    const dbConfig = await getDbConfig();
-    pool = new Pool(dbConfig);
+  if (!pool) {
+    const config = await getDbConfig();
+    pool = new Pool({
+      ...config,
+      // Add connection timeout and retry settings
+      connectionTimeoutMillis: 10000, // 10 seconds
+      idleTimeoutMillis: 30000, // 30 seconds
+      max: 20, // Maximum number of clients in the pool
+      retryDelay: 1000, // 1 second delay between retries
+      maxRetries: 3 // Maximum number of connection retries
+    });
+
+    // Add error handler for the pool
+    pool.on('error', (err, client) => {
+      console.error('Unexpected error on idle client', err);
+      // Attempt to recreate the pool on next request
+      pool = null;
+    });
   }
   return pool;
 }

@@ -104,7 +104,7 @@ async function handleRpcResponseFromClient(parsedMessage, connectedClients, clie
     const [filteredConnectedClients, largestBlockNumber] = await getFilteredConnectedClients(
       connectedClients,
       // Only pass targetBlockNumber for check messages
-      messageId.endsWith('_') || messageId.endsWith('!') ? targetBlockNumber : null
+      messageId && (messageId.endsWith('_') || messageId.endsWith('!')) ? targetBlockNumber : null
     );
     const handlingClient = Array.from(filteredConnectedClients.values())
       .find(c => c.clientID === client.clientID);
