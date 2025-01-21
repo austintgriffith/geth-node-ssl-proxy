@@ -2,6 +2,10 @@ const { getDbPool } = require('./dbUtils');
 
 // Helper function to compare block numbers as strings
 function compareBlockNumbers(a, b) {
+  // Handle null, undefined, or invalid values
+  if (!a) a = '0';
+  if (!b) b = '0';
+  
   // Convert both to strings and pad with zeros to ensure proper string comparison
   const aStr = a.toString().padStart(20, '0');
   const bStr = b.toString().padStart(20, '0');
