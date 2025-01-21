@@ -1,6 +1,14 @@
 const { getDbPool } = require('./dbUtils');
 
-async function getFilteredConnectedClients(connectedClients) {
+// Helper function to compare block numbers as strings
+function compareBlockNumbers(a, b) {
+  // Convert both to strings and pad with zeros to ensure proper string comparison
+  const aStr = a.toString().padStart(20, '0');
+  const bStr = b.toString().padStart(20, '0');
+  return aStr.localeCompare(bStr);
+}
+
+async function getFilteredConnectedClients(connectedClients, targetBlockNumber = null) {
   try {
     const pool = await getDbPool();
     const client = await pool.connect();
@@ -14,13 +22,46 @@ async function getFilteredConnectedClients(connectedClients) {
       `);
       
       // Find the largest block number
-      const largestBlockNumber = result.rows.reduce((max, row) => 
-        row.block_number > max ? row.block_number : max, 0);
+      const largestBlockNumber = result.rows.reduce((max, row) => {
+        return compareBlockNumbers(row.block_number, max) > 0 ? row.block_number : max;
+      }, '0');
 
       console.log("🔭 largest block number:", largestBlockNumber.toString());
 
-      // Filter rows with the largest block number
-      const filteredRows = result.rows.filter(row => row.block_number === largestBlockNumber);
+      // Filter rows based on block number requirement
+      const filteredRows = targetBlockNumber !== null
+        // For check requests: include nodes at or above target block
+        ? result.rows.filter(row => {
+            try {
+              const isValid = compareBlockNumbers(row.block_number, targetBlockNumber) >= 0;
+              if (!isValid) {
+                console.log(`Filtering out node ${row.socket_id} at block ${row.block_number} (target: ${targetBlockNumber})`);
+              }
+              return isValid;
+            } catch (error) {
+              console.error('Error comparing block numbers:', error, {
+                rowBlockNumber: row.block_number,
+                targetBlockNumber
+              });
+              return false;
+            }
+          })
+        // For main requests: only include nodes at the latest block
+        : result.rows.filter(row => {
+            try {
+              const isValid = compareBlockNumbers(row.block_number, largestBlockNumber) === 0;
+              if (!isValid) {
+                console.log(`Filtering out node ${row.socket_id} at block ${row.block_number} (not at latest: ${largestBlockNumber})`);
+              }
+              return isValid;
+            } catch (error) {
+              console.error('Error comparing to latest block:', error, {
+                rowBlockNumber: row.block_number,
+                largestBlockNumber
+              });
+              return false;
+            }
+          });
 
       // Create a Map of filtered clients
       const filteredClients = new Map();
@@ -30,13 +71,22 @@ async function getFilteredConnectedClients(connectedClients) {
             return client.clientID === row.socket_id;
           });
           if (matchingClient) {
-            filteredClients.set(row.socket_id, {...matchingClient, nodeStatusId: row.id});
+            filteredClients.set(row.socket_id, {
+              ...matchingClient, 
+              nodeStatusId: row.id,
+              blockNumber: row.block_number.toString()
+            });
           }
         }
       });
 
-      console.log(`👥 Total active clients: ${result.rows.length}`);
-      console.log(`🔌 Clients at latest block ${largestBlockNumber}: ${filteredClients.size}`);
+      if (targetBlockNumber !== null) {
+        console.log(`👥 Total active clients: ${result.rows.length}`);
+        console.log(`🔌 Clients at or above block ${targetBlockNumber}: ${filteredClients.size}`);
+      } else {
+        console.log(`👥 Total active clients: ${result.rows.length}`);
+        console.log(`🔌 Clients at latest block ${largestBlockNumber}: ${filteredClients.size}`);
+      }
 
       // Return as an array to properly handle both values
       return [filteredClients, largestBlockNumber];
@@ -46,7 +96,7 @@ async function getFilteredConnectedClients(connectedClients) {
   } catch (error) {
     console.error('Error in getFilteredConnectedClients:', error);
     // Return empty Map and 0 in case of error
-    return [new Map(), 0];
+    return [new Map(), '0'];
   }
 }
 

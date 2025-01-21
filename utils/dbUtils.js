@@ -32,7 +32,11 @@ async function getDbConfig() {
       ssl: {
         rejectUnauthorized: true,
         ca: require('ssl-root-cas').create().addFile('./rds-ca-2019-root.pem')
-      }
+      },
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+      maxUses: 7500
     };
   } catch (error) {
     console.error("Error fetching database secret:", error);

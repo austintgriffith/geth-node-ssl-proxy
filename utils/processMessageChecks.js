@@ -281,8 +281,6 @@ const processMessageChecks = async () => {
       }
     }
   }
-  
-  await pool.end();
 };
 
 module.exports = { processMessageChecks }; 
