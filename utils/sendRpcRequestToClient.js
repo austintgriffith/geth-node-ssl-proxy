@@ -71,12 +71,16 @@ function sendRpcRequestToClient(
               const paramIndex = mainParams.indexOf(blockParam);
               if (paramIndex !== -1) {
                 req.body.params[paramIndex] = blockNumberHex;
+                // Store the actual block number used for this check message
+                req.actualBlockNumber = largestBlockNumber;
               }
             } else {
               // Use the exact same block number as main request
               const paramIndex = mainParams.indexOf(blockParam);
               if (paramIndex !== -1) {
                 req.body.params[paramIndex] = blockParam;
+                // For non-latest params, store the original block number
+                req.actualBlockNumber = blockParam;
               }
             }
           }
@@ -92,7 +96,8 @@ function sendRpcRequestToClient(
           headers: req.headers,
           ip: req.ip,
           hasCheckMessages: req.hasCheckMessages,
-          get: req.get?.bind(req)
+          get: req.get?.bind(req),
+          actualBlockNumber: req.actualBlockNumber
         }, 
         timestamp: Date.now(), 
         rpcId: req.body.id 
@@ -104,7 +109,8 @@ function sendRpcRequestToClient(
           headers: req.headers,
           ip: req.ip,
           hasCheckMessages: req.hasCheckMessages,
-          get: req.get?.bind(req)
+          get: req.get?.bind(req),
+          actualBlockNumber: req.actualBlockNumber
         }, 
         res, 
         timestamp: Date.now(), 

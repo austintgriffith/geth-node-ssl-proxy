@@ -127,7 +127,7 @@ async function handleRpcResponseFromClient(parsedMessage, connectedClients, clie
 
       // Only include target block info in error message for check messages
       const errorMessage = (messageId.endsWith('_') || messageId.endsWith('!')) ?
-        `Client ${client.clientID} (at block ${clientBlockNumber}) no longer connected or not at required block height (target: ${targetBlockNumber}, original param: ${originalBlockParam}) - discarding response for message ${messageId}` :
+        `Client ${client.clientID} (at block ${clientBlockNumber}) no longer connected or not at required block height (target: ${targetBlockNumber}, original param: ${originalBlockParam}, actual block used: ${mainMessage?.req?.actualBlockNumber || 'unknown'}) - discarding response for message ${messageId}` :
         `Client ${client.clientID} (at block ${clientBlockNumber}) no longer connected - discarding response for message ${messageId}`;
       
       console.error(errorMessage);
