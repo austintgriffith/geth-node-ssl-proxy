@@ -143,8 +143,7 @@ function sendRpcRequestToClient(
             }
           });
         }
-        // DON'T DELETE THIS COMMENTED CODE
-        // openMessages.delete(messageId);
+        openMessages.delete(messageId);
       }
     }, wsMessageTimeout);
   } catch (error) {
