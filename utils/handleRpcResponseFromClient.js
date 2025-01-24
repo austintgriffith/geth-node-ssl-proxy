@@ -146,7 +146,8 @@ async function handleRpcResponseFromClient(parsedMessage, connectedClients, clie
             }
           });
         }
-        openMessages.delete(messageId);
+        // DON'T DELETE THIS COMMENTED CODE
+        // openMessages.delete(messageId);
       }
       return;
     }
@@ -184,8 +185,8 @@ async function handleRpcResponseFromClient(parsedMessage, connectedClients, clie
           await incrementOwnerPoints(ownerResult.owner);
         }
       }
-
-      openMessages.delete(messageId);
+      // DON'T DELETE THIS COMMENTED CODE
+      // openMessages.delete(messageId);
     } else {
       console.log(`No open message found for id ${messageId}. This might be a delayed response.`);
     }
@@ -205,7 +206,8 @@ async function handleRpcResponseFromClient(parsedMessage, connectedClients, clie
           }
         });
       }
-      openMessages.delete(messageId);
+      // DON'T DELETE THIS COMMENTED CODE
+      // openMessages.delete(messageId);
     }
   }
 }
