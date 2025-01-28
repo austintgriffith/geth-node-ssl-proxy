@@ -3,4 +3,4 @@ node_modules
 server.cert
 server.key
 yarn.lock
-rpcRequests.log
+fallbackRequests.log

@@ -2,11 +2,13 @@ const https = require("https");
 const express = require("express");
 const fs = require("fs");
 var cors = require("cors");
+const { performance } = require('perf_hooks');
 var bodyParser = require("body-parser");
 const app = express();
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleFallbackRequest } = require('./proxy_utils/handleFallbackRequest');
+const { logFallbackRequest } = require('./proxy_utils/logFallbackRequest');
 
 const { proxyPort } = require('./config');
 const { openMessages } = require('./globalMem');
@@ -39,8 +41,19 @@ app.post("/", validateRpcRequest, async (req, res) => {
   console.log("-----------------------------------------------------------------------------------------");
   console.log("📡 RPC REQUEST", req.body);
 
-  await handleFallbackRequest(req, res);
-  
+  const startTime = performance.now();
+
+  const now = new Date();
+  const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
+  const epochTime = Math.floor(now.getTime() / 1000);
+
+  const { success } = await handleFallbackRequest(req, res);
+
+  const duration = (performance.now() - startTime).toFixed(3);
+
+  logFallbackRequest(req, epochTime, utcTimestamp, duration, success);
+
+  console.log(`⏱️ Request took ${duration}ms to complete`);
   console.log("-----------------------------------------------------------------------------------------");
 });
 

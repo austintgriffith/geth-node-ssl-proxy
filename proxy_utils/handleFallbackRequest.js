@@ -1,38 +1,16 @@
 const https = require("https");
 const axios = require("axios");
-const { performance } = require('perf_hooks');
 
-const { openMessages } = require('../globalMem');
 const { fallbackUrl } = require('../config');
-
-const { generateMessageId } = require('../utils/generateMessageId');
-const { logRpcRequest } = require('../utils/logRpcRequest');
 
 async function handleFallbackRequest(req, res) {
   console.log("Using fallback mechanism");
-  try {
-    const clientIp = req.ip || req.connection.remoteAddress;
-    const messageId = generateMessageId(req.body, clientIp);
-    
-    openMessages.set(messageId, {
-      startTime: performance.now()
-    });
-    
+  try {    
     const result = await makeFallbackRpcRequest(req.body, req.headers);
-    
-    // Log the RPC request with timing information
-    req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
-    logRpcRequest(req, messageId, true);
-    
     res.json(result);
-  } catch (error) {
-    const clientIp = req.ip || req.connection.remoteAddress;
-    const messageId = generateMessageId(req.body, clientIp);
-    
-    req.handlingClient = null;
-    logRpcRequest(req, messageId, false);
-    
-    res.status(500).json({
+    return { success: true, result };
+  } catch (error) {    
+    const errorResponse = {
       jsonrpc: "2.0",
       id: req.body.id,
       error: {
@@ -40,7 +18,9 @@ async function handleFallbackRequest(req, res) {
         message: "Internal error",
         data: error.message
       }
-    });
+    };
+    res.status(500).json(errorResponse);
+    return { success: false, error: errorResponse };
   }
 }
 
@@ -49,7 +29,7 @@ async function makeFallbackRpcRequest(body, headers) {
     // Create a new headers object without the problematic host header
     const cleanedHeaders = { ...headers };
     delete cleanedHeaders.host; // Remove the host header to let axios set it correctly
-
+    
     const response = await axios.post(fallbackUrl, body, {
       headers: {
         "Content-Type": "application/json",
