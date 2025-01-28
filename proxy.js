@@ -9,8 +9,7 @@ const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleFallbackRequest } = require('./proxy_utils/handleFallbackRequest');
 
 const { proxyPort } = require('./config');
-
-const openMessages = new Map();
+const { openMessages } = require('./globalMem');
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -40,7 +39,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
   console.log("--------------------------------------------------------");
   console.log("📡 RPC REQUEST", req.body);
 
-  await handleFallbackRequest(req, res, openMessages);
+  await handleFallbackRequest(req, res);
 
   console.log("POST SERVED", req.body);
 });

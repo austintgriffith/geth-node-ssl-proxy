@@ -1,8 +1,10 @@
 const fs = require('fs');
 const { performance } = require('perf_hooks');
+
+const { openMessages } = require('../globalMem');
 const { fallbackUrl } = require('../config');
 
-function logRpcRequest(req, messageId, openMessages, success) {
+function logRpcRequest(req, messageId, success) {
   const { method, params } = req.body;
   const messageData = openMessages.get(messageId);
   const startTime = messageData ? messageData.startTime : performance.now();

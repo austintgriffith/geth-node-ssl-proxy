@@ -1,12 +1,14 @@
 const https = require("https");
 const axios = require("axios");
 const { performance } = require('perf_hooks');
+
+const { openMessages } = require('../globalMem');
 const { fallbackUrl } = require('../config');
 
 const { generateMessageId } = require('../utils/generateMessageId');
 const { logRpcRequest } = require('../utils/logRpcRequest');
 
-async function handleFallbackRequest(req, res, openMessages) {
+async function handleFallbackRequest(req, res) {
   console.log("Using fallback mechanism");
   try {
     const clientIp = req.ip || req.connection.remoteAddress;
@@ -20,7 +22,7 @@ async function handleFallbackRequest(req, res, openMessages) {
     
     // Log the RPC request with timing information
     req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
-    logRpcRequest(req, messageId, openMessages, true);
+    logRpcRequest(req, messageId, true);
     
     res.json(result);
   } catch (error) {
@@ -28,7 +30,7 @@ async function handleFallbackRequest(req, res, openMessages) {
     const messageId = generateMessageId(req.body, clientIp);
     
     req.handlingClient = null;
-    logRpcRequest(req, messageId, openMessages, false);
+    logRpcRequest(req, messageId, false);
     
     res.status(500).json({
       jsonrpc: "2.0",
