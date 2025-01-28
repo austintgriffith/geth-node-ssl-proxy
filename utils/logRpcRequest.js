@@ -2,9 +2,10 @@ const fs = require('fs');
 const { performance } = require('perf_hooks');
 const { fallbackUrl } = require('../config');
 
-function logRpcRequest(req, messageId, requestStartTimes, success) {
+function logRpcRequest(req, messageId, openMessages, success) {
   const { method, params } = req.body;
-  const startTime = requestStartTimes.get(messageId);
+  const messageData = openMessages.get(messageId);
+  const startTime = messageData ? messageData.startTime : performance.now();
   const endTime = performance.now();
   const duration = endTime - startTime;
 
@@ -45,8 +46,8 @@ function logRpcRequest(req, messageId, requestStartTimes, success) {
     }
   });
 
-  // Clean up the start time
-  requestStartTimes.delete(messageId);
+  // Clean up the message data
+  openMessages.delete(messageId);
 }
 
 module.exports = { logRpcRequest };
