@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-function logFallbackRequest(req, startTime, utcTimestamp, duration, success) {
+function logFallbackRequest(req, startTime, utcTimestamp, duration, status) {
   const { method, params } = req.body;
 
   // Get request origin from headers
@@ -23,7 +23,7 @@ function logFallbackRequest(req, startTime, utcTimestamp, duration, success) {
     }).join(',');
   }
   
-  logEntry += `|${duration}|${success ? 'success' : 'error'}\n`;
+  logEntry += `|${duration}|${status}\n`;
   
   fs.appendFile('fallbackRequests.log', logEntry, (err) => {
     if (err) {

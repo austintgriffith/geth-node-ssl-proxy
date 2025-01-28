@@ -8,19 +8,20 @@ async function handleFallbackRequest(req, res) {
   try {    
     const result = await makeFallbackRpcRequest(req.body, req.headers);
     res.json(result);
-    return { success: true, result };
+    return { status: "success" };
   } catch (error) {    
+    const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
     const errorResponse = {
       jsonrpc: "2.0",
       id: req.body.id,
       error: {
         code: -32603,
         message: "Internal error",
-        data: error.message
+        data: errorMessage
       }
     };
     res.status(500).json(errorResponse);
-    return { success: false, error: errorResponse };
+    return { status: errorMessage };
   }
 }
 

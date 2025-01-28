@@ -34,7 +34,7 @@ const server = https.createServer(
 server.listen(proxyPort, () => {
   console.log("----------------------------------------------------------------------------------------------------------------");
   console.log("----------------------------------------------------------------------------------------------------------------");
-  console.log(`HTTPS and WebSocket server listening on port ${proxyPort}...`);
+  console.log(`Proxy.js: HTTPS server listening on port ${proxyPort}...`);
 });
 
 app.post("/", validateRpcRequest, async (req, res) => {
@@ -47,11 +47,11 @@ app.post("/", validateRpcRequest, async (req, res) => {
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
   const epochTime = Math.floor(now.getTime() / 1000);
 
-  const { success } = await handleFallbackRequest(req, res);
+  const { status } = await handleFallbackRequest(req, res);
 
   const duration = (performance.now() - startTime).toFixed(3);
 
-  logFallbackRequest(req, epochTime, utcTimestamp, duration, success);
+  logFallbackRequest(req, epochTime, utcTimestamp, duration, status);
 
   console.log(`⏱️ Request took ${duration}ms to complete`);
   console.log("-----------------------------------------------------------------------------------------");
