@@ -36,13 +36,12 @@ server.listen(proxyPort, () => {
 });
 
 app.post("/", validateRpcRequest, async (req, res) => {
-  console.log("--------------------------------------------------------");
+  console.log("-----------------------------------------------------------------------------------------");
   console.log("📡 RPC REQUEST", req.body);
 
   await handleFallbackRequest(req, res);
-
-  console.log("POST SERVED", req.body);
-  console.log("--------------------------------------------------------");
+  
+  console.log("-----------------------------------------------------------------------------------------");
 });
 
 module.exports = {
