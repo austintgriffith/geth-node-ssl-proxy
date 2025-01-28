@@ -18,7 +18,7 @@ async function handleFallbackRequest(req, res) {
       startTime: performance.now()
     });
     
-    const result = await makeFallbackRpcRequest(fallbackUrl, req.body, req.headers);
+    const result = await makeFallbackRpcRequest(req.body, req.headers);
     
     // Log the RPC request with timing information
     req.handlingClient = null;  // This will make it use the fallback URL in logRpcRequest
@@ -44,13 +44,13 @@ async function handleFallbackRequest(req, res) {
   }
 }
 
-async function makeFallbackRpcRequest(url, body, headers) {
+async function makeFallbackRpcRequest(body, headers) {
   try {
     // Create a new headers object without the problematic host header
     const cleanedHeaders = { ...headers };
     delete cleanedHeaders.host; // Remove the host header to let axios set it correctly
 
-    const response = await axios.post(url, body, {
+    const response = await axios.post(fallbackUrl, body, {
       headers: {
         "Content-Type": "application/json",
         ...cleanedHeaders,

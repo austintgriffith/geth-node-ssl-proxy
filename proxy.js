@@ -42,6 +42,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
   await handleFallbackRequest(req, res);
 
   console.log("POST SERVED", req.body);
+  console.log("--------------------------------------------------------");
 });
 
 module.exports = {
