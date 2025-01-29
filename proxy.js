@@ -7,11 +7,10 @@ var bodyParser = require("body-parser");
 const app = express();
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
-const { handleFallbackRequest } = require('./proxy_utils/handleFallbackRequest');
-const { logFallbackRequest } = require('./proxy_utils/logFallbackRequest');
+const { handleFallbackRequest } = require('./utils/handleFallbackRequest');
+const { logFallbackRequest } = require('./utils/logFallbackRequest');
 
 const { proxyPort } = require('./config');
-const { openMessages } = require('./globalMem');
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -64,5 +63,4 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
 module.exports = {
   app,
-  openMessages
 };
