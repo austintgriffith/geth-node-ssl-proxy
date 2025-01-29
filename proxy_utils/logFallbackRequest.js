@@ -12,6 +12,9 @@ function logFallbackRequest(req, startTime, utcTimestamp, duration, status) {
     reqHost = req.get('host').split(':')[0];
   }
 
+  // Sanitize status by removing any newlines and extra whitespace
+  const cleanStatus = status ? status.toString().replace(/[\r\n\s]+/g, ' ').trim() : 'unknown';
+
   let logEntry = `${utcTimestamp}|${startTime}|${reqHost}|${method}|`;
   
   if (params && Array.isArray(params)) {
@@ -23,7 +26,7 @@ function logFallbackRequest(req, startTime, utcTimestamp, duration, status) {
     }).join(',');
   }
   
-  logEntry += `|${duration}|${status}\n`;
+  logEntry += `|${duration}|${cleanStatus}\n`;
   
   fs.appendFile('fallbackRequests.log', logEntry, (err) => {
     if (err) {
