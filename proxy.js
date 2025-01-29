@@ -44,7 +44,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
   const now = new Date();
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
-  const epochTime = Math.floor(now.getTime() / 1000);
+  const epochTime = Math.floor(now.getTime());
 
   const { status } = await handleFallbackRequest(req, res);
 
