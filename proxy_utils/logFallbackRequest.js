@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { fallbackRequestLogPath } = require('../config');
 
 function logFallbackRequest(req, startTime, utcTimestamp, duration, status) {
   const { method, params } = req.body;
@@ -28,7 +29,7 @@ function logFallbackRequest(req, startTime, utcTimestamp, duration, status) {
   
   logEntry += `|${duration}|${cleanStatus}\n`;
   
-  fs.appendFile('fallbackRequests.log', logEntry, (err) => {
+  fs.appendFile(fallbackRequestLogPath, logEntry, (err) => {
     if (err) {
       console.error('Error writing to log file:', err);
     }

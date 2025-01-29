@@ -3,10 +3,14 @@ const proxyPort = 48544;
 const webServerPort = 48545;
 const fallbackRequestTimeout = 15000; // 15 seconds
 
+const fallbackRequestLogPath = "/home/ubuntu/shared/fallbackRequests.log";
+
 
 module.exports = {
   fallbackUrl,
   proxyPort,
   webServerPort,
   fallbackRequestTimeout,
+
+  fallbackRequestLogPath,
 };
