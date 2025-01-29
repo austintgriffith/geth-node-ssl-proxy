@@ -1,7 +1,7 @@
 const https = require("https");
 const axios = require("axios");
 
-const { fallbackUrl } = require('../config');
+const { fallbackUrl, fallbackRequestTimeout } = require('../config');
 
 async function handleFallbackRequest(req, res) {
   console.log("Using fallback mechanism");
@@ -36,6 +36,7 @@ async function makeFallbackRpcRequest(body, headers) {
         "Content-Type": "application/json",
         ...cleanedHeaders,
       },
+      timeout: fallbackRequestTimeout,
       httpsAgent: new https.Agent({
         rejectUnauthorized: true
       })
@@ -45,6 +46,10 @@ async function makeFallbackRpcRequest(body, headers) {
     console.error("RPC request error:", error);
     if (error.response && error.response.data) {
       throw error.response.data;
+    }
+    // Add specific handling for timeout errors
+    if (error.code === 'ECONNABORTED') {
+      throw new Error(`Request timed out after ${fallbackRequestTimeout/1000} seconds`);
     }
     throw error;
   }

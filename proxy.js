@@ -53,7 +53,12 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
   logFallbackRequest(req, epochTime, utcTimestamp, duration, status);
 
-  console.log(`⏱️ Request took ${duration}ms to complete`);
+  if (status === "success") {
+    console.log(`⏱️ Request took ${duration}ms to complete`);
+  } else {
+    console.log(`⏱️ Request took ${duration}ms to complete`);
+    console.log(`⏱️ Request failed with status: ${status}`);
+  }
   console.log("-----------------------------------------------------------------------------------------");
 });
 
