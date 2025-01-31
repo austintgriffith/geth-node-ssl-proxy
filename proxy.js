@@ -24,8 +24,8 @@ app.use(cors({
 // Create the HTTPS server
 const server = https.createServer(
   {
-    key: fs.readFileSync("server.key"),
-    cert: fs.readFileSync("server.cert"),
+    key: fs.readFileSync("/home/ubuntu/shared/server.key"),
+    cert: fs.readFileSync("/home/ubuntu/shared/server.cert"),
   },
   app
 );
