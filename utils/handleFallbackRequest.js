@@ -8,7 +8,7 @@ async function handleFallbackRequest(req, res) {
   try {    
     const result = await makeFallbackRpcRequest(req.body, req.headers);
     res.json(result);
-    return { status: "success" };
+    return "success";
   } catch (error) {    
     const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
     const errorResponse = {
@@ -21,7 +21,7 @@ async function handleFallbackRequest(req, res) {
       }
     };
     res.status(500).json(errorResponse);
-    return { status: errorMessage };
+    return errorMessage;
   }
 }
 

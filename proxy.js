@@ -2,6 +2,7 @@ const https = require("https");
 const express = require("express");
 const fs = require("fs");
 var cors = require("cors");
+const axios = require('axios');
 const { performance } = require('perf_hooks');
 var bodyParser = require("body-parser");
 const app = express();
@@ -9,8 +10,11 @@ const app = express();
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleFallbackRequest } = require('./utils/handleFallbackRequest');
 const { logFallbackRequest } = require('./utils/logFallbackRequest');
+const { handleCachedRequest } = require('./utils/handleCachedRequest');
 
-const { proxyPort } = require('./config');
+const { proxyPort, cacheTTL } = require('./config');
+
+const cachedMethods = ['eth_chainId'];
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -45,8 +49,13 @@ app.post("/", validateRpcRequest, async (req, res) => {
   const now = new Date();
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
   const epochTime = Math.floor(now.getTime());
-
-  const { status } = await handleFallbackRequest(req, res);
+  let status;
+  
+  if (cachedMethods.includes(req.body.method)) {
+    status = await handleCachedRequest(req, res);
+  } else {
+    status = await handleFallbackRequest(req, res);
+  }
 
   const duration = (performance.now() - startTime).toFixed(3);
 
