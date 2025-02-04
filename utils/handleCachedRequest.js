@@ -1,20 +1,10 @@
 const https = require("https");
 const axios = require("axios");
 
-const { cacheTTL } = require('../config');
-
-let cacheData = null;
-let lastCacheFetch = 0;
-
 async function getCache(key) {
   try {
-    const now = Date.now();
-    // Refresh cache if it's expired or doesn't exist
-    if (!cacheData || now - lastCacheFetch > cacheTTL) {
-      const response = await axios.get('http://localhost:3002');
-      cacheData = response.data;
-      lastCacheFetch = now;
-    }
+    const response = await axios.get('http://localhost:3002');
+    const cacheData = response.data;
     return cacheData[key] || null;
   } catch (error) {
     console.error("Error in getCache:", error);

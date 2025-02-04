@@ -13,9 +13,9 @@ const { handleCachedRequest } = require('./utils/handleCachedRequest');
 const { logFallbackRequest } = require('./utils/logFallbackRequest');
 const { logCacheRequest } = require('./utils/logCacheRequest');
 
-const { proxyPort, cacheTTL } = require('./config');
+const { proxyPort } = require('./config');
 
-const cachedMethods = ['eth_chainId'];
+const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -38,7 +38,7 @@ const server = https.createServer(
 server.listen(proxyPort, () => {
   console.log("----------------------------------------------------------------------------------------------------------------");
   console.log("----------------------------------------------------------------------------------------------------------------");
-  console.log(`Proxy.js: HTTPS server listening on port ${proxyPort}...`);
+  console.log(`HTTPS server listening on port ${proxyPort}...`);
 });
 
 app.post("/", validateRpcRequest, async (req, res) => {
