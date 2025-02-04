@@ -4,6 +4,7 @@ const webServerPort = 48545;
 const fallbackRequestTimeout = 15000; // 15 seconds
 
 const fallbackRequestLogPath = "/home/ubuntu/shared/fallbackRequests.log";
+const cacheRequestLogPath = "/home/ubuntu/shared/cacheRequests.log";
 
 
 module.exports = {
@@ -13,4 +14,5 @@ module.exports = {
   fallbackRequestTimeout,
 
   fallbackRequestLogPath,
+  cacheRequestLogPath,
 };

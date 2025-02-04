@@ -9,8 +9,9 @@ const app = express();
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleFallbackRequest } = require('./utils/handleFallbackRequest');
-const { logFallbackRequest } = require('./utils/logFallbackRequest');
 const { handleCachedRequest } = require('./utils/handleCachedRequest');
+const { logFallbackRequest } = require('./utils/logFallbackRequest');
+const { logCacheRequest } = require('./utils/logCacheRequest');
 
 const { proxyPort, cacheTTL } = require('./config');
 
@@ -59,7 +60,11 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
   const duration = (performance.now() - startTime).toFixed(3);
 
-  logFallbackRequest(req, epochTime, utcTimestamp, duration, status);
+  if (cachedMethods.includes(req.body.method)) {
+    logCacheRequest(req, epochTime, utcTimestamp, duration, status);
+  } else {
+    logFallbackRequest(req, epochTime, utcTimestamp, duration, status);
+  }
 
   if (status === "success") {
     console.log(`⏱️ Request took ${duration}ms to complete`);
