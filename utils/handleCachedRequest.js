@@ -3,26 +3,35 @@ const axios = require("axios");
 
 const { cacheServerUrl, cacheRequestTimeout } = require('../config');
 
-async function getCache(key) {
-  try {
-    const response = await axios.get(cacheServerUrl, {
-      timeout: cacheRequestTimeout,
-      validateStatus: function (status) {
-        return status >= 200 && status < 300; // Accept only success status codes
+async function getCache(key, retries = 3, delay = 75) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.get(cacheServerUrl, {
+        timeout: cacheRequestTimeout,
+        validateStatus: function (status) {
+          return status >= 200 && status < 300; // Accept only success status codes
+        }
+      });
+      const cacheData = response.data;
+      console.log('Looking for key:', key);
+      console.log('Value found:', cacheData[key]);
+      return cacheData[key] || null;
+    } catch (error) {
+      if (attempt === retries) {
+        if (error.code === 'ECONNREFUSED' || error.code === 'ECONNRESET') {
+          console.error(`Cache server not available at ${cacheServerUrl} (attempt ${attempt}/${retries})`);
+        } else if (error.code === 'ETIMEDOUT') {
+          console.error(`Cache request timed out after ${cacheRequestTimeout}ms (attempt ${attempt}/${retries})`);
+        } else {
+          console.error(`Error in getCache (attempt ${attempt}/${retries}):`, error);
+        }
+        return null;
       }
-    });
-    const cacheData = response.data;
-    return cacheData[key] || null;
-  } catch (error) {
-    if (error.code === 'ECONNREFUSED' || error.code === 'ECONNRESET') {
-      console.error(`Cache server not available at ${CACHE_SERVER_URL}`);
-    } else if (error.code === 'ETIMEDOUT') {
-      console.error(`Cache request timed out after ${cacheRequestTimeout}ms`);
-    } else {
-      console.error("Error in getCache:", error);
+      console.log(`Retrying cache request in ${delay}ms (attempt ${attempt}/${retries})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
-    return null;
   }
+  return null;
 }
 
 async function handleCachedRequest(req, res) {
