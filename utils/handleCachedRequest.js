@@ -6,7 +6,8 @@ const { cacheServerUrl, cacheRequestTimeout } = require('../config');
 async function getCache(key, retries = 3, delay = 75) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const response = await axios.get(cacheServerUrl, {
+      const url = `${cacheServerUrl}?key=${encodeURIComponent(key)}`;
+      const response = await axios.get(url, {
         timeout: cacheRequestTimeout,
         validateStatus: function (status) {
           return status >= 200 && status < 300; // Accept only success status codes
