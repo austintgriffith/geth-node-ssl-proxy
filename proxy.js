@@ -13,7 +13,7 @@ const { handleCachedRequest } = require('./utils/handleCachedRequest');
 const { logFallbackRequest } = require('./utils/logFallbackRequest');
 const { logCacheRequest } = require('./utils/logCacheRequest');
 
-const { proxyPort } = require('./config');
+const { proxyPortEx, poolPortIn } = require('./config');
 
 const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
 
@@ -35,10 +35,10 @@ const server = https.createServer(
   app
 );
 
-server.listen(proxyPort, () => {
+server.listen(proxyPortEx, () => {
   console.log("----------------------------------------------------------------------------------------------------------------");
   console.log("----------------------------------------------------------------------------------------------------------------");
-  console.log(`HTTPS server listening on port ${proxyPort}...`);
+  console.log(`HTTPS server listening on port ${proxyPortEx}...`);
 });
 
 app.post("/", validateRpcRequest, async (req, res) => {
