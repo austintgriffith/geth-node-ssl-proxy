@@ -1,12 +1,12 @@
 const https = require("https");
 const axios = require("axios");
 
-const { cacheServerUrl, cacheRequestTimeout } = require('../config');
+const { cachePort, cacheRequestTimeout } = require('../config');
 
 async function getCache(key, retries = 3, delay = 75) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const url = `${cacheServerUrl}?key=${encodeURIComponent(key)}`;
+      const url = `http://localhost:${cachePort}?key=${encodeURIComponent(key)}`;
       const response = await axios.get(url, {
         timeout: cacheRequestTimeout,
         validateStatus: function (status) {
@@ -20,7 +20,7 @@ async function getCache(key, retries = 3, delay = 75) {
     } catch (error) {
       if (attempt === retries) {
         if (error.code === 'ECONNREFUSED' || error.code === 'ECONNRESET') {
-          console.error(`Cache server not available at ${cacheServerUrl} (attempt ${attempt}/${retries})`);
+          console.error(`Cache server not available at ${cachePort} (attempt ${attempt}/${retries})`);
         } else if (error.code === 'ETIMEDOUT') {
           console.error(`Cache request timed out after ${cacheRequestTimeout}ms (attempt ${attempt}/${retries})`);
         } else {
