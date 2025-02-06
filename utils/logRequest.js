@@ -1,7 +1,7 @@
 const fs = require('fs');
-const { fallbackRequestLogPath } = require('../config');
+const { fallbackRequestLogPath, cacheRequestLogPath, poolRequestLogPath } = require('../config');
 
-function logFallbackRequest(req, startTime, utcTimestamp, duration, status) {
+function logRequest(req, startTime, utcTimestamp, duration, status, type) {
   const { method, params } = req.body;
 
   // Get request origin from headers
@@ -28,12 +28,21 @@ function logFallbackRequest(req, startTime, utcTimestamp, duration, status) {
   }
   
   logEntry += `|${duration}|${cleanStatus}\n`;
+
+  let logPath;
+  if (type === 'fallback') {
+    logPath = fallbackRequestLogPath;
+  } else if (type === 'cache') {
+    logPath = cacheRequestLogPath;
+  } else if (type === 'pool') {
+    logPath = poolRequestLogPath;
+  }
   
-  fs.appendFile(fallbackRequestLogPath, logEntry, (err) => {
+  fs.appendFile(logPath, logEntry, (err) => {
     if (err) {
       console.error('Error writing to log file:', err);
     }
   });
 }
 
-module.exports = { logFallbackRequest };
+module.exports = { logRequest };

@@ -8,12 +8,11 @@ var bodyParser = require("body-parser");
 const app = express();
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
-const { handleFallbackRequest } = require('./utils/handleFallbackRequest');
+const { handleRequest } = require('./utils/handleRequest');
 const { handleCachedRequest } = require('./utils/handleCachedRequest');
-const { logFallbackRequest } = require('./utils/logFallbackRequest');
-const { logCacheRequest } = require('./utils/logCacheRequest');
+const { logRequest } = require('./utils/logRequest');
 
-const { proxyPortPublic, poolPort } = require('./config');
+const { proxyPortPublic } = require('./config');
 
 const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
 
@@ -51,20 +50,25 @@ app.post("/", validateRpcRequest, async (req, res) => {
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
   const epochTime = Math.floor(now.getTime());
   let status;
-  
-  if (cachedMethods.includes(req.body.method)) {
-    status = await handleCachedRequest(req, res);
-  } else {
-    status = await handleFallbackRequest(req, res);
-  }
+
+  // status = await handleRequest(req, res, 'pool');
+  status = await handleCachedRequest(req, res);
+  // DO NOT DELETE THIS CODE
+  // if (cachedMethods.includes(req.body.method)) {
+  //   status = await handleCachedRequest(req, res);
+  // } else {
+  //   status = await handleRequest(req, res);
+  // }
 
   const duration = (performance.now() - startTime).toFixed(3);
+  // DO NOT DELETE THIS CODE
+  // if (cachedMethods.includes(req.body.method)) {
+  //   logCacheRequest(req, epochTime, utcTimestamp, duration, status);
+  // } else {
+  //   logRequest(req, epochTime, utcTimestamp, duration, status);
+  // }
 
-  if (cachedMethods.includes(req.body.method)) {
-    logCacheRequest(req, epochTime, utcTimestamp, duration, status);
-  } else {
-    logFallbackRequest(req, epochTime, utcTimestamp, duration, status);
-  }
+  logRequest(req, epochTime, utcTimestamp, duration, status, 'cache');
 
   if (status === "success") {
     console.log(`⏱️ Request took ${duration}ms to complete`);

@@ -9,7 +9,7 @@ const cacheRequestTimeout = 5000; // 5 second timeout
 
 const fallbackRequestLogPath = "/home/ubuntu/shared/fallbackRequests.log";
 const cacheRequestLogPath = "/home/ubuntu/shared/cacheRequests.log";
-
+const poolRequestLogPath = "/home/ubuntu/shared/poolRequests.log";      
 
 module.exports = {
   fallbackUrl,
@@ -22,4 +22,5 @@ module.exports = {
 
   fallbackRequestLogPath,
   cacheRequestLogPath,
+  poolRequestLogPath,
 };
