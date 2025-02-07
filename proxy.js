@@ -51,7 +51,6 @@ app.post("/", validateRpcRequest, async (req, res) => {
   const epochTime = Math.floor(now.getTime());
   let status;
 
-  // DO NOT DELETE THIS CODE
   if (cachedMethods.includes(req.body.method)) {
     status = await handleCachedRequest(req, res);
   } else {
@@ -59,7 +58,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
   }
 
   const duration = (performance.now() - startTime).toFixed(3);
-  // DO NOT DELETE THIS CODE
+ 
   if (cachedMethods.includes(req.body.method)) {
     logRequest(req, epochTime, utcTimestamp, duration, status, 'cache');
   } else {
