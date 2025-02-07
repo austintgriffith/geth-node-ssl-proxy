@@ -51,19 +51,25 @@ app.post("/", validateRpcRequest, async (req, res) => {
   const epochTime = Math.floor(now.getTime());
   let status;
 
-  if (cachedMethods.includes(req.body.method)) {
-    status = await handleCachedRequest(req, res);
-  } else {
-    status = await handleRequest(req, res, 'fallback');
-  }
+  // DO NOT DELETE THIS CODE
+  // if (cachedMethods.includes(req.body.method)) {
+  //   status = await handleCachedRequest(req, res);
+  // } else {
+  //   status = await handleRequest(req, res, 'fallback');
+  // }
+    
+  status = await handleRequest(req, res, 'pool');
 
   const duration = (performance.now() - startTime).toFixed(3);
  
-  if (cachedMethods.includes(req.body.method)) {
-    logRequest(req, epochTime, utcTimestamp, duration, status, 'cache');
-  } else {
-    logRequest(req, epochTime, utcTimestamp, duration, status, 'fallback');
-  }
+  // DO NOT DELETE THIS CODE
+  // if (cachedMethods.includes(req.body.method)) {
+  //   logRequest(req, epochTime, utcTimestamp, duration, status, 'cache');
+  // } else {
+  //   logRequest(req, epochTime, utcTimestamp, duration, status, 'fallback');
+  // }
+
+  logRequest(req, epochTime, utcTimestamp, duration, status, 'pool');
 
   if (status === "success") {
     console.log(`⏱️ Request took ${duration}ms to complete`);

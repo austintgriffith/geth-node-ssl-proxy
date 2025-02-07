@@ -4,7 +4,12 @@ const axios = require("axios");
 const { fallbackUrl, fallbackRequestTimeout, poolPort } = require('../config');
 
 async function handleRequest(req, res, type) {
-  console.log("Using fallback mechanism");
+  if (type === 'fallback') {
+    console.log("Using fallback mechanism");
+  } else if (type === 'pool') {
+    console.log("Using pool mechanism");
+  }
+
   try {    
     const result = await makeRequest(req.body, req.headers, type);
     console.log("Full RPC Response:", JSON.stringify(result, null, 2));
@@ -33,21 +38,21 @@ async function makeRequest(body, headers, type) {
     if (type === 'fallback') {
       url = fallbackUrl;
     } else if (type === 'pool') {
-      url = `http://localhost:${poolPort}` ;
+      url = `https://localhost:${poolPort}/requestPool` ;
     }
 
     // Create a new headers object without the problematic host header
     const cleanedHeaders = { ...headers };
     delete cleanedHeaders.host; // Remove the host header to let axios set it correctly
     
-      const response = await axios.post(url, body, {
+    const response = await axios.post(url, body, {
       headers: {
         "Content-Type": "application/json",
         ...cleanedHeaders,
       },
       timeout: fallbackRequestTimeout,
       httpsAgent: new https.Agent({
-        rejectUnauthorized: true
+        rejectUnauthorized: false // Only for local development
       })
     });
     return response.data;
