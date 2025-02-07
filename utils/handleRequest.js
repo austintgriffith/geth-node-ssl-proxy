@@ -16,7 +16,9 @@ async function handleRequest(req, res, type) {
     res.json(result);
     return "success";
   } catch (error) {    
-    const errorMessage = error.response?.data?.error?.message || error.message || 'Unknown error';
+    console.error("Handler caught error:", error);
+    // At this point, error should be an Error object with a message
+    const errorMessage = error.message || 'Unknown error';
     const errorResponse = {
       jsonrpc: "2.0",
       id: req.body.id,
@@ -28,7 +30,7 @@ async function handleRequest(req, res, type) {
     };
     console.log("Full Error Response:", JSON.stringify(errorResponse, null, 2));
     res.status(500).json(errorResponse);
-    return errorMessage;
+    return errorMessage;  // This is what gets logged
   }
 }
 
@@ -58,14 +60,21 @@ async function makeRequest(body, headers, type) {
     return response.data;
   } catch (error) {
     console.error("RPC request error:", error);
-    if (error.response && error.response.data) {
-      throw error.response.data;
+    console.error("Error response data:", error.response?.data);
+    
+    // If we have a response with error data, throw that directly
+    if (error.response?.data?.error) {
+      const errorMessage = error.response.data.error.message || error.response.data.error.data || "Unknown error";
+      throw new Error(errorMessage);
     }
-    // Add specific handling for timeout errors
+    
+    // Handle timeout errors
     if (error.code === 'ECONNABORTED') {
       throw new Error(`Request timed out after ${fallbackRequestTimeout/1000} seconds`);
     }
-    throw error;
+    
+    // For any other error, throw with a descriptive message
+    throw new Error(error.message || "Unknown error");
   }
 }
 
