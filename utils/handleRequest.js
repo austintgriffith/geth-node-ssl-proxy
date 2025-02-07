@@ -59,7 +59,10 @@ async function makeRequest(body, headers, type) {
     const cleanedHeaders = { ...headers };
     delete cleanedHeaders.host; // Remove the host header to let axios set it correctly
     
-    const response = await axios.post(url, body, {
+    // Ensure body is not pre-stringified before axios handles it
+    const requestBody = typeof body === 'string' ? JSON.parse(body) : body;
+    
+    const response = await axios.post(url, requestBody, {
       headers: {
         "Content-Type": "application/json",
         ...cleanedHeaders,
