@@ -14,9 +14,7 @@ const { logRequest } = require('./utils/logRequest');
 
 const { proxyPortPublic } = require('./config');
 
-// DO NOT DELETE THIS CODE
-// const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
-const cachedMethods = ['foo'];
+const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 

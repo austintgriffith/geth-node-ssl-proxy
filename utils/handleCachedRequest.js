@@ -36,7 +36,7 @@ async function getCache(key, retries = 3, delay = 75) {
 }
 
 async function handleCachedRequest(req, res) {
-  console.log("Using cached request mechanism");
+  console.log("💾 Using cached request mechanism");
   try {    
     const result = await getCache(req.body.method);
     if (!result) {

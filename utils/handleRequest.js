@@ -5,9 +5,9 @@ const { fallbackUrl, fallbackRequestTimeout, poolPort } = require('../config');
 
 async function handleRequest(req, res, type) {
   if (type === 'fallback') {
-    console.log("Using fallback mechanism");
+    console.log("🍁 Using fallback mechanism");
   } else if (type === 'pool') {
-    console.log("Using pool mechanism");
+    console.log("🤿 Using pool mechanism");
   }
 
   try {    
