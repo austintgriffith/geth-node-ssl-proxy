@@ -52,6 +52,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
   const epochTime = Math.floor(now.getTime());
   let status;
   let requestType;
+  let response;
 
   try {
     if (cachedMethods.includes(req.body.method)) {
@@ -59,21 +60,40 @@ app.post("/", validateRpcRequest, async (req, res) => {
       requestType = 'cache';
     } else {
       // Try pool first
-      status = await handleRequest(req, res, 'pool');
+      const poolResult = await handleRequest(req, res, 'pool');
       requestType = 'pool';
-
-      // If pool fails, try fallback
-      if (status !== 'success') {
+      
+      if (poolResult.success) {
+        response = poolResult.data;
+        status = "success";
+      } else {
+        // Pool failed, try fallback
         console.log("🔄 Pool request failed, trying fallback...");
-        status = await handleRequest(req, res, 'fallback');
+        const fallbackResult = await handleRequest(req, res, 'fallback');
         requestType = 'fallback';
+        
+        if (fallbackResult.success) {
+          response = fallbackResult.data;
+          status = "success";
+        } else {
+          // Both pool and fallback failed
+          response = fallbackResult.error;
+          status = "error";
+        }
       }
     }
 
     const duration = (performance.now() - startTime).toFixed(3);
     logRequest(req, epochTime, utcTimestamp, duration, status, requestType);
 
-    console.log(`⏱️ Request completed in ${duration}ms with status: ${status}`);
+    // Only send response after all attempts are complete
+    if (status === "success") {
+      console.log(`⏱️ Request completed in ${duration}ms with status: ${status}`);
+      res.json(response);
+    } else {
+      console.log(`❌ Request failed after ${duration}ms`);
+      res.status(500).json(response);
+    }
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(3);
     status = "error";
@@ -83,6 +103,16 @@ app.post("/", validateRpcRequest, async (req, res) => {
     console.log(`❌ Request failed after ${duration}ms: ${errorMessage}`);
     
     logRequest(req, epochTime, utcTimestamp, duration, status, requestType || 'unknown');
+
+    // Send error response
+    res.status(500).json({
+      jsonrpc: "2.0",
+      id: req.body.id,
+      error: {
+        code: -32603,
+        message: errorMessage
+      }
+    });
   }
   console.log("-----------------------------------------------------------------------------------------");
 });

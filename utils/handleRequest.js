@@ -12,24 +12,16 @@ async function handleRequest(req, res, type) {
 
   try {    
     const result = await makeRequest(req.body, req.headers, type);
-    console.log("Full RPC Response:", JSON.stringify(result, null, 2));
-    res.json(result);
-    return "success";
+    console.log("RPC Response:", result);
+    return { success: true, data: result };
   } catch (error) {    
-    console.error("Handler caught error:", error);
-    
-    // Extract complete error information
-    let errorMessage;
-    if (error.error) {
-        // For structured errors, include both code and message
-        errorMessage = `[${error.error.code}] ${error.error.message}`;
-        if (error.error.data) {
-            errorMessage += `: ${error.error.data}`;
-        }
-    } else {
-        // Fallback
-        errorMessage = error.message || 'Unknown error';
-    }
+    // Simple error logging with essential info only
+    const errorDetails = error.response?.data?.error || error.error || error;
+    console.log("❌ Request failed:", {
+      message: errorDetails.message || error.message,
+      code: errorDetails.code,
+      data: errorDetails.data
+    });
     
     const errorResponse = {
         jsonrpc: "2.0",
@@ -37,12 +29,10 @@ async function handleRequest(req, res, type) {
         error: {
             code: -32603,
             message: "Internal error",
-            data: errorMessage
+            data: errorDetails.message || error.message
         }
     };
-    console.log("Full Error Response:", JSON.stringify(errorResponse, null, 2));
-    res.status(500).json(errorResponse);
-    return JSON.stringify(errorResponse);  // Return full error response for logging
+    return { success: false, error: errorResponse };
   }
 }
 
@@ -57,9 +47,8 @@ async function makeRequest(body, headers, type) {
 
     // Create a new headers object without the problematic host header
     const cleanedHeaders = { ...headers };
-    delete cleanedHeaders.host; // Remove the host header to let axios set it correctly
+    delete cleanedHeaders.host;
     
-    // Ensure body is not pre-stringified before axios handles it
     const requestBody = typeof body === 'string' ? JSON.parse(body) : body;
     
     const response = await axios.post(url, requestBody, {
@@ -69,34 +58,29 @@ async function makeRequest(body, headers, type) {
       },
       timeout: fallbackRequestTimeout,
       httpsAgent: new https.Agent({
-        rejectUnauthorized: false // Only for local development
+        rejectUnauthorized: false
       })
     });
     return response.data;
   } catch (error) {
-    console.error("RPC request error:", error);
-    console.error("Error response data:", error.response?.data);
-    
-    // Pass through the complete error response
+    // Simplified error logging for network/request errors
     if (error.response?.data) {
-      throw error.response.data;  // Throw the complete error response
+      throw error.response.data;
     }
     
-    // For timeout errors, create a structured error
     if (error.code === 'ECONNABORTED') {
       throw {
         error: {
-          message: "Request timeout",
-          data: `Request timed out after ${fallbackRequestTimeout/1000} seconds`
+          code: -32603,
+          message: `Request timed out after ${fallbackRequestTimeout/1000} seconds`
         }
       };
     }
     
-    // For any other error, create a structured error
     throw {
       error: {
-        message: error.name || "Error",
-        data: error.message || "Unknown error"
+        code: -32603,
+        message: error.message || "Unknown error"
       }
     };
   }
