@@ -14,7 +14,9 @@ const { logRequest } = require('./utils/logRequest');
 
 const { proxyPortPublic } = require('./config');
 
-const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
+// DO NOT DELETE THIS CODE
+// const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
+const cachedMethods = ['foo'];
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -45,37 +47,42 @@ app.post("/", validateRpcRequest, async (req, res) => {
   console.log("📡 RPC REQUEST", req.body);
 
   const startTime = performance.now();
-
   const now = new Date();
   const utcTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
   const epochTime = Math.floor(now.getTime());
   let status;
+  let requestType;
 
-  // DO NOT DELETE THIS CODE
-  // if (cachedMethods.includes(req.body.method)) {
-  //   status = await handleCachedRequest(req, res);
-  // } else {
-  //   status = await handleRequest(req, res, 'fallback');
-  // }
+  try {
+    if (cachedMethods.includes(req.body.method)) {
+      status = await handleCachedRequest(req, res);
+      requestType = 'cache';
+    } else {
+      // Try pool first
+      status = await handleRequest(req, res, 'pool');
+      requestType = 'pool';
+
+      // If pool fails, try fallback
+      if (status !== 'success') {
+        console.log("🔄 Pool request failed, trying fallback...");
+        status = await handleRequest(req, res, 'fallback');
+        requestType = 'fallback';
+      }
+    }
+
+    const duration = (performance.now() - startTime).toFixed(3);
+    logRequest(req, epochTime, utcTimestamp, duration, status, requestType);
+
+    console.log(`⏱️ Request completed in ${duration}ms with status: ${status}`);
+  } catch (error) {
+    const duration = (performance.now() - startTime).toFixed(3);
+    status = "error";
     
-  status = await handleRequest(req, res, 'pool');
-
-  const duration = (performance.now() - startTime).toFixed(3);
- 
-  // DO NOT DELETE THIS CODE
-  // if (cachedMethods.includes(req.body.method)) {
-  //   logRequest(req, epochTime, utcTimestamp, duration, status, 'cache');
-  // } else {
-  //   logRequest(req, epochTime, utcTimestamp, duration, status, 'fallback');
-  // }
-
-  logRequest(req, epochTime, utcTimestamp, duration, status, 'pool');
-
-  if (status === "success") {
-    console.log(`⏱️ Request took ${duration}ms to complete`);
-  } else {
-    console.log(`⏱️ Request took ${duration}ms to complete`);
-    console.log(`⏱️ Request failed with status: ${status}`);
+    // Simplified error logging
+    const errorMessage = error.response?.data?.error?.message || error.message;
+    console.log(`❌ Request failed after ${duration}ms: ${errorMessage}`);
+    
+    logRequest(req, epochTime, utcTimestamp, duration, status, requestType || 'unknown');
   }
   console.log("-----------------------------------------------------------------------------------------");
 });
