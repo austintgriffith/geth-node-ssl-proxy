@@ -105,15 +105,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
       } catch (cacheError) {
         // Log cache error with full error details
         const cacheDuration = (performance.now() - startTime).toFixed(3);
-        logRequest(req, epochTime, utcTimestamp, cacheDuration, {
-          jsonrpc: "2.0",
-          id: req.body.id,
-          error: {
-            code: -32603,
-            message: "Cache request error",
-            data: cacheError.message
-          }
-        }, 'cache');
+        logRequest(req, epochTime, utcTimestamp, cacheDuration, cacheError.message, 'cache');
         
         // Cache threw an error, try pool
         console.log("🔄 Cache request error, trying pool...", cacheError);
