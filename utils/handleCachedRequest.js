@@ -10,15 +10,22 @@ async function getCache(key, retries = 3, delay = 75) {
       const response = await axios.get(url, {
         timeout: cacheRequestTimeout,
         validateStatus: function (status) {
-          return status >= 200 && status < 300; // Accept only success status codes
+          return true; // Accept all status codes to handle error responses
         }
       });
+      
+      // Check if response contains an error
+      if (response.data.error) {
+        throw new Error(response.data.error);
+      }
+      
       const cacheData = response.data;
       console.log('Looking for key:', key);
       console.log('Value found:', cacheData[key]);
       return cacheData[key] || null;
     } catch (error) {
       if (attempt === retries) {
+        // Get the most specific error message available
         const errorMessage = error.response?.data?.error || error.message;
         if (error.code === 'ECONNREFUSED' || error.code === 'ECONNRESET') {
           console.error(`Cache server not available at ${cachePort}`);
@@ -27,7 +34,7 @@ async function getCache(key, retries = 3, delay = 75) {
         } else {
           console.error(`Cache error: ${errorMessage}`);
         }
-        return null;
+        throw new Error(errorMessage);
       }
       console.log(`Retrying cache request in ${delay}ms (attempt ${attempt}/${retries})`);
       await new Promise(resolve => setTimeout(resolve, delay));
