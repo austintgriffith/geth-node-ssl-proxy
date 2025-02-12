@@ -76,15 +76,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
           const poolDuration = (performance.now() - poolStartTime).toFixed(3);
           
           // Log pool attempt - only include full details for errors
-          logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : {
-            jsonrpc: "2.0",
-            id: req.body.id,
-            error: {
-              code: -32603,
-              message: "Pool request failed",
-              data: poolResult.error
-            }
-          }, 'pool');
+          logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : poolResult.error, 'pool');
           
           requestType = 'pool';
           if (poolResult.success) {
@@ -98,15 +90,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
             const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
             
             // Log fallback attempt - only include full details for errors
-            logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : {
-              jsonrpc: "2.0",
-              id: req.body.id,
-              error: {
-                code: -32603,
-                message: "Fallback request failed",
-                data: fallbackResult.error
-              }
-            }, 'fallback');
+            logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
             
             requestType = 'fallback';
             if (fallbackResult.success) {
@@ -138,15 +122,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
         const poolDuration = (performance.now() - poolStartTime).toFixed(3);
         
         // Log pool attempt - only include full details for errors
-        logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : {
-          jsonrpc: "2.0",
-          id: req.body.id,
-          error: {
-            code: -32603,
-            message: "Pool request failed",
-            data: poolResult.error
-          }
-        }, 'pool');
+        logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : poolResult.error, 'pool');
         
         requestType = 'pool';
         if (poolResult.success) {
@@ -160,15 +136,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
           const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
           
           // Log fallback attempt - only include full details for errors
-          logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : {
-            jsonrpc: "2.0",
-            id: req.body.id,
-            error: {
-              code: -32603,
-              message: "Fallback request failed",
-              data: fallbackResult.error
-            }
-          }, 'fallback');
+          logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
           
           requestType = 'fallback';
           if (fallbackResult.success) {
@@ -187,15 +155,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
       const poolDuration = (performance.now() - poolStartTime).toFixed(3);
       
       // Log pool attempt - only include full details for errors
-      logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : {
-        jsonrpc: "2.0",
-        id: req.body.id,
-        error: {
-          code: -32603,
-          message: "Pool request failed",
-          data: poolResult.error
-        }
-      }, 'pool');
+      logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : poolResult.error, 'pool');
       
       requestType = 'pool';
       if (poolResult.success) {
@@ -209,15 +169,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
         const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
         
         // Log fallback attempt - only include full details for errors
-        logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : {
-          jsonrpc: "2.0",
-          id: req.body.id,
-          error: {
-            code: -32603,
-            message: "Fallback request failed",
-            data: fallbackResult.error
-          }
-        }, 'fallback');
+        logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
         
         requestType = 'fallback';
         if (fallbackResult.success) {
