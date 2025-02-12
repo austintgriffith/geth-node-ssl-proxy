@@ -15,8 +15,8 @@ const { logRequest } = require('./utils/logRequest');
 const { proxyPortPublic } = require('./config');
 
 // DO NOT DELETE THIS CODE
-// const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
-const cachedMethods = ['foo'];
+const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
+// const cachedMethods = ['foo'];
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -58,15 +58,16 @@ app.post("/", validateRpcRequest, async (req, res) => {
     if (cachedMethods.includes(req.body.method)) {
       try {
         const cacheStartTime = performance.now();
-        status = await handleCachedRequest(req, res);
+        const cacheResult = await handleCachedRequest(req, res);
         const cacheDuration = (performance.now() - cacheStartTime).toFixed(3);
         
         // Log cache attempt - only include full details for errors
-        logRequest(req, epochTime, utcTimestamp, cacheDuration, status === "success" ? "success" : status, 'cache');
+        logRequest(req, epochTime, utcTimestamp, cacheDuration, cacheResult.success ? "success" : cacheResult.error, 'cache');
         
-        if (status === "success") {
+        if (cacheResult.success) {
           requestType = 'cache';
-          response = status;
+          response = cacheResult.data;
+          status = "success";
         } else {
           // Cache failed, try pool
           console.log("🔄 Cache request failed, trying pool...");

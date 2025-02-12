@@ -19,12 +19,13 @@ async function getCache(key, retries = 3, delay = 75) {
       return cacheData[key] || null;
     } catch (error) {
       if (attempt === retries) {
+        const errorMessage = error.response?.data?.error || error.message;
         if (error.code === 'ECONNREFUSED' || error.code === 'ECONNRESET') {
-          console.error(`Cache server not available at ${cachePort} (attempt ${attempt}/${retries})`);
+          console.error(`Cache server not available at ${cachePort}`);
         } else if (error.code === 'ETIMEDOUT') {
-          console.error(`Cache request timed out after ${cacheRequestTimeout}ms (attempt ${attempt}/${retries})`);
+          console.error(`Cache request timed out after ${cacheRequestTimeout}ms`);
         } else {
-          console.error(`Error in getCache (attempt ${attempt}/${retries}):`, error);
+          console.error(`Cache error: ${errorMessage}`);
         }
         return null;
       }
@@ -43,28 +44,20 @@ async function handleCachedRequest(req, res) {
       throw new Error(`Cache miss for key: ${req.body.method}`);
     }
     
-    const response = {
-      jsonrpc: "2.0",
-      id: req.body.id,
-      result: result
-    };
-    
-    res.json(response);
-    return "success";
-  } catch (error) {    
-    console.error("Error in handleCachedRequest:", error);
-    const errorMessage = error.message || 'Unknown error';
-    const errorResponse = {
-      jsonrpc: "2.0",
-      id: req.body.id,
-      error: {
-        code: -32603,
-        message: "Internal error",
-        data: errorMessage
+    return {
+      success: true,
+      data: {
+        jsonrpc: "2.0",
+        id: req.body.id,
+        result: result
       }
     };
-    res.status(500).json(errorResponse);
-    return errorMessage;
+  } catch (error) {    
+    console.error("Error in handleCachedRequest:", error);
+    return {
+      success: false,
+      error: error.message || 'Unknown error'
+    };
   }
 }
 
