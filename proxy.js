@@ -14,7 +14,9 @@ const { logRequest } = require('./utils/logRequest');
 
 const { proxyPortPublic } = require('./config');
 
-const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
+// DO NOT DELETE THIS CODE
+// const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
+const cachedMethods = ['foo'];
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
@@ -54,42 +56,185 @@ app.post("/", validateRpcRequest, async (req, res) => {
 
   try {
     if (cachedMethods.includes(req.body.method)) {
-      status = await handleCachedRequest(req, res);
-      requestType = 'cache';
+      try {
+        const cacheStartTime = performance.now();
+        status = await handleCachedRequest(req, res);
+        const cacheDuration = (performance.now() - cacheStartTime).toFixed(3);
+        
+        // Log cache attempt - only include full details for errors
+        logRequest(req, epochTime, utcTimestamp, cacheDuration, status === "success" ? "success" : status, 'cache');
+        
+        if (status === "success") {
+          requestType = 'cache';
+          response = status;
+        } else {
+          // Cache failed, try pool
+          console.log("🔄 Cache request failed, trying pool...");
+          const poolStartTime = performance.now();
+          const poolResult = await handleRequest(req, res, 'pool');
+          const poolDuration = (performance.now() - poolStartTime).toFixed(3);
+          
+          // Log pool attempt - only include full details for errors
+          logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : {
+            jsonrpc: "2.0",
+            id: req.body.id,
+            error: {
+              code: -32603,
+              message: "Pool request failed",
+              data: poolResult.error
+            }
+          }, 'pool');
+          
+          requestType = 'pool';
+          if (poolResult.success) {
+            response = poolResult.data;
+            status = "success";
+          } else {
+            // Pool failed, try fallback
+            console.log("🔄 Pool request failed, trying fallback...");
+            const fallbackStartTime = performance.now();
+            const fallbackResult = await handleRequest(req, res, 'fallback');
+            const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
+            
+            // Log fallback attempt - only include full details for errors
+            logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : {
+              jsonrpc: "2.0",
+              id: req.body.id,
+              error: {
+                code: -32603,
+                message: "Fallback request failed",
+                data: fallbackResult.error
+              }
+            }, 'fallback');
+            
+            requestType = 'fallback';
+            if (fallbackResult.success) {
+              response = fallbackResult.data;
+              status = "success";
+            } else {
+              response = fallbackResult.error;
+              status = "error";
+            }
+          }
+        }
+      } catch (cacheError) {
+        // Log cache error with full error details
+        const cacheDuration = (performance.now() - startTime).toFixed(3);
+        logRequest(req, epochTime, utcTimestamp, cacheDuration, {
+          jsonrpc: "2.0",
+          id: req.body.id,
+          error: {
+            code: -32603,
+            message: "Cache request error",
+            data: cacheError.message
+          }
+        }, 'cache');
+        
+        // Cache threw an error, try pool
+        console.log("🔄 Cache request error, trying pool...", cacheError);
+        const poolStartTime = performance.now();
+        const poolResult = await handleRequest(req, res, 'pool');
+        const poolDuration = (performance.now() - poolStartTime).toFixed(3);
+        
+        // Log pool attempt - only include full details for errors
+        logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : {
+          jsonrpc: "2.0",
+          id: req.body.id,
+          error: {
+            code: -32603,
+            message: "Pool request failed",
+            data: poolResult.error
+          }
+        }, 'pool');
+        
+        requestType = 'pool';
+        if (poolResult.success) {
+          response = poolResult.data;
+          status = "success";
+        } else {
+          // Pool failed, try fallback
+          console.log("🔄 Pool request failed, trying fallback...");
+          const fallbackStartTime = performance.now();
+          const fallbackResult = await handleRequest(req, res, 'fallback');
+          const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
+          
+          // Log fallback attempt - only include full details for errors
+          logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : {
+            jsonrpc: "2.0",
+            id: req.body.id,
+            error: {
+              code: -32603,
+              message: "Fallback request failed",
+              data: fallbackResult.error
+            }
+          }, 'fallback');
+          
+          requestType = 'fallback';
+          if (fallbackResult.success) {
+            response = fallbackResult.data;
+            status = "success";
+          } else {
+            response = fallbackResult.error;
+            status = "error";
+          }
+        }
+      }
     } else {
-      // Try pool first
+      // Non-cached methods: Try pool first
+      const poolStartTime = performance.now();
       const poolResult = await handleRequest(req, res, 'pool');
-      requestType = 'pool';
+      const poolDuration = (performance.now() - poolStartTime).toFixed(3);
       
+      // Log pool attempt - only include full details for errors
+      logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : {
+        jsonrpc: "2.0",
+        id: req.body.id,
+        error: {
+          code: -32603,
+          message: "Pool request failed",
+          data: poolResult.error
+        }
+      }, 'pool');
+      
+      requestType = 'pool';
       if (poolResult.success) {
         response = poolResult.data;
         status = "success";
       } else {
         // Pool failed, try fallback
         console.log("🔄 Pool request failed, trying fallback...");
+        const fallbackStartTime = performance.now();
         const fallbackResult = await handleRequest(req, res, 'fallback');
-        requestType = 'fallback';
+        const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
         
+        // Log fallback attempt - only include full details for errors
+        logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : {
+          jsonrpc: "2.0",
+          id: req.body.id,
+          error: {
+            code: -32603,
+            message: "Fallback request failed",
+            data: fallbackResult.error
+          }
+        }, 'fallback');
+        
+        requestType = 'fallback';
         if (fallbackResult.success) {
           response = fallbackResult.data;
           status = "success";
         } else {
-          // Both pool and fallback failed
           response = fallbackResult.error;
           status = "error";
         }
       }
     }
 
-    const duration = (performance.now() - startTime).toFixed(3);
-    logRequest(req, epochTime, utcTimestamp, duration, status, requestType);
-
     // Only send response after all attempts are complete
     if (status === "success") {
-      console.log(`⏱️ Request completed in ${duration}ms with status: ${status}`);
+      console.log(`⏱️ Request completed with status: ${status}`);
       res.json(response);
     } else {
-      console.log(`❌ Request failed after ${duration}ms`);
+      console.log(`❌ Request failed`);
       res.status(500).json(response);
     }
   } catch (error) {
@@ -106,7 +251,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
       }
     };
     
-    logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType || 'unknown');
+    logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType);
 
     // Send error response
     res.status(500).json(errorResponse);
