@@ -94,23 +94,22 @@ app.post("/", validateRpcRequest, async (req, res) => {
     }
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(3);
-    status = "error";
     
-    // Simplified error logging
-    const errorMessage = error.response?.data?.error?.message || error.message;
-    console.log(`❌ Request failed after ${duration}ms: ${errorMessage}`);
-    
-    logRequest(req, epochTime, utcTimestamp, duration, status, requestType || 'unknown');
-
-    // Send error response
-    res.status(500).json({
+    // Create proper error response object
+    const errorResponse = {
       jsonrpc: "2.0",
       id: req.body.id,
       error: {
         code: -32603,
-        message: errorMessage
+        message: "Internal error",
+        data: error.response?.data?.error?.message || error.message
       }
-    });
+    };
+    
+    logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType || 'unknown');
+
+    // Send error response
+    res.status(500).json(errorResponse);
   }
   console.log("-----------------------------------------------------------------------------------------");
 });

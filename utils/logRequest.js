@@ -13,8 +13,13 @@ function logRequest(req, startTime, utcTimestamp, duration, status, type) {
     reqHost = req.get('host').split(':')[0];
   }
 
-  // Sanitize status by removing any newlines and extra whitespace
-  const cleanStatus = status ? status.toString().replace(/[\r\n\s]+/g, ' ').trim() : 'unknown';
+  // Format status properly - if it's an object, stringify it, otherwise use as is
+  let cleanStatus;
+  if (typeof status === 'object' && status !== null) {
+    cleanStatus = JSON.stringify(status);
+  } else {
+    cleanStatus = status ? status.toString().replace(/[\r\n\s]+/g, ' ').trim() : 'unknown';
+  }
 
   let logEntry = `${utcTimestamp}|${startTime}|${reqHost}|${method}|`;
   
