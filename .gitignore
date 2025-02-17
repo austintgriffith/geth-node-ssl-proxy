@@ -6,4 +6,3 @@ prysm/
 server.cert
 server.key
 yarn.lock
-.env
