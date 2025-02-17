@@ -4,7 +4,7 @@ const proxyPortPublic = 48544;
 const webServerPort = 48545;
 const poolPort = 3003;
 const fallbackRequestTimeout = 15000; // 15 seconds
-const cacheRequestTimeout = 5000; // 5 second timeout
+const cacheKeyTimeout = 15000; // 15 second timeout
 
 
 const fallbackRequestLogPath = "/home/ubuntu/shared/fallbackRequests.log";
@@ -18,7 +18,7 @@ module.exports = {
   webServerPort,
   poolPort,
   fallbackRequestTimeout,
-  cacheRequestTimeout,
+  cacheKeyTimeout,
 
   fallbackRequestLogPath,
   cacheRequestLogPath,

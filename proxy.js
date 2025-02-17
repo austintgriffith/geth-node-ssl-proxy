@@ -9,14 +9,18 @@ const app = express();
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleRequest } = require('./utils/handleRequest');
-const { handleCachedRequest } = require('./utils/handleCachedRequest');
+const { handleCachedRequest, subscribeToCacheUpdates } = require('./utils/handleCachedRequest');
 const { logRequest } = require('./utils/logRequest');
 
 const { proxyPortPublic } = require('./config');
 
-// DO NOT DELETE THIS CODE
-const cachedMethods = ['eth_chainId', 'eth_blockNumber'];
-// const cachedMethods = ['foo'];
+// Initialize with empty array, will be updated by cache service
+let cachedMethods = [];
+
+// Subscribe to cache updates
+subscribeToCacheUpdates((methods) => {
+  cachedMethods = methods;
+});
 
 https.globalAgent.options.ca = require("ssl-root-cas").create(); // For sql connection
 
