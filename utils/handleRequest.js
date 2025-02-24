@@ -15,7 +15,13 @@ async function handleRequest(req, res, type) {
     console.log("RPC Response:", result);
     return { success: true, data: result };
   } catch (error) {    
-    // Simple error logging with essential info only
+    // If the error is already in JSON-RPC format, pass it through
+    if (error.jsonrpc === "2.0" && error.error) {
+      console.log("❌ Request failed:", error);
+      return { success: false, error: error };
+    }
+    
+    // For other errors, format them as before
     const errorDetails = error.response?.data?.error || error.error || error;
     console.log("❌ Request failed:", {
       message: errorDetails.message || error.message,
