@@ -48,7 +48,7 @@ async function makeRequest(body, headers, type) {
     if (type === 'fallback') {
       url = fallbackUrl;
     } else if (type === 'pool') {
-      url = `https://localhost:${poolPort}/requestPool` ;
+      url = `http://localhost:${poolPort}/requestPool`;  // Changed to http since it's local
     }
 
     // Create a new headers object without the problematic host header
@@ -57,16 +57,22 @@ async function makeRequest(body, headers, type) {
     
     const requestBody = typeof body === 'string' ? JSON.parse(body) : body;
     
-    const response = await axios.post(url, requestBody, {
+    const axiosConfig = {
       headers: {
         "Content-Type": "application/json",
         ...cleanedHeaders,
       },
       timeout: fallbackRequestTimeout,
-      httpsAgent: new https.Agent({
+    };
+
+    // Only add httpsAgent for fallback requests
+    if (type === 'fallback') {
+      axiosConfig.httpsAgent = new https.Agent({
         rejectUnauthorized: false
-      })
-    });
+      });
+    }
+    
+    const response = await axios.post(url, requestBody, axiosConfig);
     return response.data;
   } catch (error) {
     // Simplified error logging for network/request errors
