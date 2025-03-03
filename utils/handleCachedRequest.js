@@ -2,6 +2,7 @@ const https = require("https");
 const axios = require("axios");
 const WebSocket = require('ws');
 const EventEmitter = require('events');
+const fs = require('fs');
 
 const { cachePort, cacheKeyTimeout } = require('../config');
 
@@ -27,7 +28,12 @@ function connectWebSocket() {
   connectionAttempts++;
   console.log(`Attempting to connect to cache WebSocket (attempt ${connectionAttempts}/${MAX_RETRIES})`);
   
-  ws = new WebSocket(`ws://localhost:${cachePort}/ws`);
+  const wsOptions = {
+    rejectUnauthorized: false,
+    ca: fs.readFileSync('/home/ubuntu/shared/server.cert')
+  };
+  
+  ws = new WebSocket(`wss://localhost:${cachePort}/ws`, wsOptions);
 
   ws.on('open', () => {
     console.log('Connected to cache WebSocket server');
