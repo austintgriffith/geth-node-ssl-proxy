@@ -2,7 +2,6 @@ const https = require("https");
 const express = require("express");
 const fs = require("fs");
 var cors = require("cors");
-const axios = require('axios');
 const { performance } = require('perf_hooks');
 var bodyParser = require("body-parser");
 const app = express();
