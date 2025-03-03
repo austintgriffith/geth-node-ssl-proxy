@@ -29,15 +29,17 @@ function connectWebSocket() {
   console.log(`Attempting to connect to cache WebSocket (attempt ${connectionAttempts}/${MAX_RETRIES})`);
   
   const wsOptions = {
-    rejectUnauthorized: false,
-    ca: fs.readFileSync('/home/ubuntu/shared/server.cert')
+    rejectUnauthorized: true,
+    cert: fs.readFileSync('/home/ubuntu/shared/server.cert'),
+    key: fs.readFileSync('/home/ubuntu/shared/server.key'),
+    checkServerIdentity: () => undefined // Skip hostname check since we're connecting locally
   };
   
-  ws = new WebSocket(`wss://localhost:${cachePort}/ws`, wsOptions);
+  ws = new WebSocket(`wss://127.0.0.1:${cachePort}/ws`, wsOptions);
 
   ws.on('open', () => {
     console.log('Connected to cache WebSocket server');
-    connectionAttempts = 0; // Reset counter on successful connection
+    connectionAttempts = 0;
   });
 
   ws.on('message', (data) => {
@@ -48,7 +50,7 @@ function connectWebSocket() {
       if (method === 'eth_blockNumber') {
         const currentBlock = cacheMap.get(method)?.value;
         if (currentBlock && value <= currentBlock) {
-          return; // Skip if new block number isn't higher
+          return;
         }
       }
       
@@ -69,7 +71,6 @@ function connectWebSocket() {
 
   ws.on('close', () => {
     console.log('WebSocket connection closed');
-    // Clear cached methods when connection is lost
     cachedMethods.clear();
     cacheEvents.emit('cachedMethodsUpdated', []);
     

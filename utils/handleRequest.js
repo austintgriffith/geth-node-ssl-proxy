@@ -1,5 +1,6 @@
 const https = require("https");
 const axios = require("axios");
+const fs = require("fs");
 
 const { fallbackUrl, fallbackRequestTimeout, poolPort } = require('../config');
 
@@ -48,7 +49,7 @@ async function makeRequest(body, headers, type) {
     if (type === 'fallback') {
       url = fallbackUrl;
     } else if (type === 'pool') {
-      url = `https://localhost:${poolPort}/requestPool`;  // Changed to https
+      url = `https://stage.rpc.buidlguidl.com:${poolPort}/requestPool`;
     }
 
     // Create a new headers object without the problematic host header
@@ -63,17 +64,12 @@ async function makeRequest(body, headers, type) {
         ...cleanedHeaders,
       },
       timeout: fallbackRequestTimeout,
-      httpsAgent: new https.Agent({  // Always use httpsAgent now
-        rejectUnauthorized: false
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: true,
+        cert: fs.readFileSync('/home/ubuntu/shared/server.cert'),
+        key: fs.readFileSync('/home/ubuntu/shared/server.key')
       })
     };
-
-    // Only add httpsAgent for fallback requests
-    // if (type === 'fallback') {
-    //   axiosConfig.httpsAgent = new https.Agent({
-    //     rejectUnauthorized: false
-    //   });
-    // }
     
     const response = await axios.post(url, requestBody, axiosConfig);
     return response.data;
