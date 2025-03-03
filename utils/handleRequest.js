@@ -2,6 +2,8 @@ const https = require("https");
 const axios = require("axios");
 const fs = require("fs");
 
+require('dotenv').config();
+
 const { fallbackUrl, fallbackRequestTimeout, poolPort } = require('../config');
 
 async function handleRequest(req, res, type) {
@@ -49,7 +51,7 @@ async function makeRequest(body, headers, type) {
     if (type === 'fallback') {
       url = fallbackUrl;
     } else if (type === 'pool') {
-      url = `https://stage.rpc.buidlguidl.com:${poolPort}/requestPool`;
+      url = `https://${process.env.HOST}:${poolPort}/requestPool`;
     }
 
     // Create a new headers object without the problematic host header

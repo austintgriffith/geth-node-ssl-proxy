@@ -1,10 +1,8 @@
-const https = require("https");
-const axios = require("axios");
 const WebSocket = require('ws');
 const EventEmitter = require('events');
 const fs = require('fs');
 
-const { cachePort, cacheKeyTimeout } = require('../config');
+const { cachePort, cacheKeyTimeout, cacheMaxRetries, cacheRetryDelay } = require('../config');
 
 // Create event emitter for cache updates
 const cacheEvents = new EventEmitter();
@@ -16,17 +14,15 @@ const cachedMethods = new Set();
 // WebSocket connection management
 let ws = null;
 let connectionAttempts = 0;
-const MAX_RETRIES = 5;
-const RETRY_DELAY = 5000; // 5 seconds
 
 function connectWebSocket() {
-  if (connectionAttempts >= MAX_RETRIES) {
-    console.error(`Failed to connect to cache WebSocket after ${MAX_RETRIES} attempts, giving up`);
+  if (connectionAttempts >= cacheMaxRetries) {
+    console.error(`Failed to connect to cache WebSocket after ${cacheMaxRetries} attempts, giving up`);
     return;
   }
 
   connectionAttempts++;
-  console.log(`Attempting to connect to cache WebSocket (attempt ${connectionAttempts}/${MAX_RETRIES})`);
+  console.log(`Attempting to connect to cache WebSocket (attempt ${connectionAttempts}/${cacheMaxRetries})`);
   
   const wsOptions = {
     rejectUnauthorized: true,
@@ -74,9 +70,9 @@ function connectWebSocket() {
     cachedMethods.clear();
     cacheEvents.emit('cachedMethodsUpdated', []);
     
-    if (connectionAttempts < MAX_RETRIES) {
-      console.log(`Attempting to reconnect in ${RETRY_DELAY}ms...`);
-      setTimeout(connectWebSocket, RETRY_DELAY);
+    if (connectionAttempts < cacheMaxRetries) {
+      console.log(`Attempting to reconnect in ${cacheRetryDelay}ms...`);
+      setTimeout(connectWebSocket, cacheRetryDelay);
     } else {
       console.error('Max reconnection attempts reached, giving up');
     }
