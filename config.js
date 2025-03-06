@@ -8,7 +8,6 @@ const cacheMaxRetries = 50;
 const cacheRetryDelay = 5000; // 5 seconds
 const cacheKeyTimeout = 15000; // 15 second timeout
 
-
 const fallbackRequestLogPath = "/home/ubuntu/shared/fallbackRequests.log";
 const cacheRequestLogPath = "/home/ubuntu/shared/cacheRequests.log";
 const poolRequestLogPath = "/home/ubuntu/shared/poolRequests.log";      

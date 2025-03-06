@@ -99,7 +99,9 @@ function getCacheValue(method) {
   const now = Date.now();
   if (now - timestamp > cacheKeyTimeout) {
     const ageMs = now - timestamp;
-    throw new Error(`Cache stale: Value for method ${method} is ${ageMs}ms old (threshold: ${cacheKeyTimeout}ms)`);
+
+    throw new Error(`{"error":{"code":-69004,"message":"Cache stale: Value for method ${method} is ${ageMs}ms old (threshold: ${cacheKeyTimeout}ms)"}}`);
+    // throw new Error(`Cache stale: Value for method ${method} is ${ageMs}ms old (threshold: ${cacheKeyTimeout}ms)`);
   }
   
   return value;
