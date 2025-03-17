@@ -52,7 +52,7 @@ function connectWebSocket() {
       
       cacheMap.set(method, { value, timestamp });
       cachedMethods.add(method);
-      console.log(`Updated local cache for ${method}:`, value);
+      // console.log(`Updated local cache for ${method}:`, value);
       
       // Emit event when cached methods change
       cacheEvents.emit('cachedMethodsUpdated', Array.from(cachedMethods));

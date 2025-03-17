@@ -15,7 +15,7 @@ async function handleRequest(req, res, type) {
 
   try {    
     const result = await makeRequest(req.body, req.headers, type);
-    console.log("RPC Response:", result);
+    // console.log("RPC Response:", result);
     return { success: true, data: result };
   } catch (error) {    
     // If the error is already in JSON-RPC format, pass it through
