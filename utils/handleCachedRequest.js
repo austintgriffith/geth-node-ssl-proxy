@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const EventEmitter = require('events');
 const fs = require('fs');
 
-const { cachePort, cacheKeyTimeout, cacheMaxRetries, cacheRetryDelay } = require('../config');
+const { poolPort, cacheKeyTimeout, cacheMaxRetries, cacheRetryDelay } = require('../config');
 
 // Create event emitter for cache updates
 const cacheEvents = new EventEmitter();
@@ -31,7 +31,7 @@ function connectWebSocket() {
     checkServerIdentity: () => undefined // Skip hostname check since we're connecting locally
   };
   
-  ws = new WebSocket(`wss://127.0.0.1:${cachePort}/ws`, wsOptions);
+  ws = new WebSocket(`wss://127.0.0.1:${poolPort}/ws`, wsOptions);
 
   ws.on('open', () => {
     console.log('Connected to cache WebSocket server');
