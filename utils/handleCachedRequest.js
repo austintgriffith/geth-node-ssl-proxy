@@ -22,7 +22,7 @@ function connectWebSocket() {
   }
 
   connectionAttempts++;
-  console.log(`Attempting to connect to cache WebSocket (attempt ${connectionAttempts}/${cacheMaxRetries})`);
+  console.log(`Attempting to connect to pool cache WebSocket (attempt ${connectionAttempts}/${cacheMaxRetries})`);
   
   const wsOptions = {
     rejectUnauthorized: true,
