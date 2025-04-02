@@ -40,7 +40,14 @@ function connectWebSocket() {
 
   ws.on('message', (data) => {
     try {
-      const { method, value, timestamp } = JSON.parse(data);
+      const message = JSON.parse(data);
+      
+      // Only process cache update messages
+      if (message.type !== 'cacheUpdate') {
+        return;
+      }
+
+      const { method, params, value, timestamp } = message;
       
       // For eth_blockNumber, only update if new value is higher
       if (method === 'eth_blockNumber') {
@@ -50,7 +57,7 @@ function connectWebSocket() {
         }
       }
       
-      cacheMap.set(method, { value, timestamp });
+      cacheMap.set(method, { value, params, timestamp });
       cachedMethods.add(method);
       // console.log(`Updated local cache for ${method}:`, value);
       
@@ -64,6 +71,9 @@ function connectWebSocket() {
           if (cacheData) {
               const timestamp = new Date(cacheData.timestamp).toLocaleString();
               console.log(`Method: ${method}`);
+              if (cacheData.params) {
+                  console.log(`Params: ${JSON.stringify(cacheData.params)}`);
+              }
               console.log(`Value: ${cacheData.value}`);
               console.log(`Last Updated: ${timestamp}`);
               console.log('-------------------');
