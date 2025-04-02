@@ -56,6 +56,19 @@ function connectWebSocket() {
       
       // Emit event when cached methods change
       cacheEvents.emit('cachedMethodsUpdated', Array.from(cachedMethods));
+
+      console.log('===============================');
+      console.log('\n=== Cached RPC Methods ===\n');
+      Array.from(cachedMethods).forEach(method => {
+          const cacheData = cacheMap.get(method);
+          if (cacheData) {
+              const timestamp = new Date(cacheData.timestamp).toLocaleString();
+              console.log(`Method: ${method}`);
+              console.log(`Value: ${cacheData.value}`);
+              console.log(`Last Updated: ${timestamp}`);
+              console.log('-------------------');
+          }
+      });
     } catch (error) {
       console.error('Error processing WebSocket message:', error);
     }
