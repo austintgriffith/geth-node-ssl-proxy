@@ -8,7 +8,7 @@ const app = express();
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleRequest } = require('./utils/handleRequest');
-const { handleCachedRequest, subscribeToCacheUpdates } = require('./utils/handleCachedRequest');
+const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('./utils/handleCachedRequest');
 const { logRequest } = require('./utils/logRequest');
 
 const { proxyPortPublic } = require('./config');
@@ -58,7 +58,13 @@ app.post("/", validateRpcRequest, async (req, res) => {
   let response;
 
   try {
-    if (cachedMethods.includes(req.body.method)) {
+    // Check if method is cached and parameters match
+    const cacheMap = getCacheMap();
+    const cachedMethod = cacheMap.get(req.body.method);
+    const isCachedMethod = cachedMethod && 
+                          JSON.stringify(cachedMethod.params) === JSON.stringify(req.body.params || []);
+
+    if (isCachedMethod) {
       try {
         const cacheStartTime = performance.now();
         const cacheResult = await handleCachedRequest(req, res);

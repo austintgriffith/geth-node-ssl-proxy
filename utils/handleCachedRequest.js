@@ -163,8 +163,14 @@ function subscribeToCacheUpdates(callback) {
   callback(Array.from(cachedMethods));
 }
 
+// Function to get the cache map
+function getCacheMap() {
+  return cacheMap;
+}
+
 module.exports = { 
   handleCachedRequest,
   getCachedMethods,
-  subscribeToCacheUpdates
+  subscribeToCacheUpdates,
+  getCacheMap
 };
