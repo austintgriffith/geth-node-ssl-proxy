@@ -1,7 +1,7 @@
 const fallbackUrl = "https://office.buidlguidl.com:48544";
-const cachePort = 3002;
 const proxyPortPublic = 48544;
 const webServerPort = 48545;
+const proxyPort = 3002;
 const poolPort = 3003;
 const fallbackRequestTimeout = 5000; // 5 seconds
 const cacheMaxRetries = 50;
@@ -14,9 +14,9 @@ const poolRequestLogPath = "/home/ubuntu/shared/poolRequests.log";
 
 module.exports = {
   fallbackUrl,
-  cachePort,
   proxyPortPublic,
   webServerPort,
+  proxyPort,
   poolPort,
   fallbackRequestTimeout,
   cacheKeyTimeout,

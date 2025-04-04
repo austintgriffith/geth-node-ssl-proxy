@@ -5,13 +5,14 @@ var cors = require("cors");
 const { performance } = require('perf_hooks');
 var bodyParser = require("body-parser");
 const app = express();
+const internalApp = express();
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleRequest } = require('./utils/handleRequest');
 const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('./utils/handleCachedRequest');
 const { logRequest } = require('./utils/logRequest');
 
-const { proxyPortPublic } = require('./config');
+const { proxyPortPublic, proxyPort } = require('./config');
 
 // Initialize with empty array, will be updated by cache service
 let cachedMethods = [];
@@ -30,7 +31,27 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Create the HTTPS server
+// Create the internal HTTPS server for cacheMap endpoint
+const internalServer = https.createServer(
+  {
+    key: fs.readFileSync("/home/ubuntu/shared/server.key"),
+    cert: fs.readFileSync("/home/ubuntu/shared/server.cert"),
+  },
+  internalApp
+);
+
+// Endpoint to get cache map data on internal port
+internalApp.get("/cacheMap", (req, res) => {
+  const cacheMap = getCacheMap();
+  const cacheData = Object.fromEntries(cacheMap);
+  res.json(cacheData);
+});
+
+internalServer.listen(proxyPort, () => {
+  console.log(`Internal HTTPS server listening on port ${proxyPort}...`);
+});
+
+// Create the public HTTPS server
 const server = https.createServer(
   {
     key: fs.readFileSync("/home/ubuntu/shared/server.key"),
