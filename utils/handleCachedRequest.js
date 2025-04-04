@@ -11,6 +11,11 @@ const cacheEvents = new EventEmitter();
 const cacheMap = new Map();
 const cachedMethods = new Set();
 
+// Helper function to create cache key from method and params
+function createCacheKey(method, params) {
+  return `${method}:${JSON.stringify(params)}`;
+}
+
 // WebSocket connection management
 let ws = null;
 let connectionAttempts = 0;
@@ -51,32 +56,31 @@ function connectWebSocket() {
       
       // For eth_blockNumber, only update if new value is higher
       if (method === 'eth_blockNumber') {
-        const currentBlock = cacheMap.get(method)?.value;
+        const currentBlock = cacheMap.get(createCacheKey(method, []))?.value;
         if (currentBlock && value <= currentBlock) {
           return;
         }
       }
       
-      cacheMap.set(method, { value, params, timestamp });
+      const cacheKey = createCacheKey(method, params);
+      cacheMap.set(cacheKey, { value, params, timestamp });
       cachedMethods.add(method);
-      // console.log(`Updated local cache for ${method}:`, value);
       
       // Emit event when cached methods change
       cacheEvents.emit('cachedMethodsUpdated', Array.from(cachedMethods));
 
-      console.log('===============================');
       console.log('\n=== Cached RPC Methods ===\n');
       Array.from(cachedMethods).forEach(method => {
-          const cacheData = cacheMap.get(method);
-          if (cacheData) {
-              const timestamp = new Date(cacheData.timestamp).toLocaleString();
-              console.log(`Method: ${method}`);
-              if (cacheData.params) {
+          // Find all cache entries for this method
+          for (const [key, cacheData] of cacheMap.entries()) {
+              if (key.startsWith(method + ':')) {
+                  const timestamp = new Date(cacheData.timestamp).toLocaleString();
+                  console.log(`Method: ${method}`);
                   console.log(`Params: ${JSON.stringify(cacheData.params)}`);
+                  console.log(`Value: ${cacheData.value}`);
+                  console.log(`Last Updated: ${timestamp}`);
+                  console.log('-------------------');
               }
-              console.log(`Value: ${cacheData.value}`);
-              console.log(`Last Updated: ${timestamp}`);
-              console.log('-------------------');
           }
       });
     } catch (error) {
@@ -105,10 +109,11 @@ function connectWebSocket() {
 // Initial connection attempt
 connectWebSocket();
 
-function getCacheValue(method) {
-  const cacheEntry = cacheMap.get(method);
+function getCacheValue(method, params) {
+  const cacheKey = createCacheKey(method, params);
+  const cacheEntry = cacheMap.get(cacheKey);
   if (!cacheEntry) {
-    throw new Error(`Cache miss: No cached value found for method ${method}`);
+    throw new Error(`Cache miss: No cached value found for method ${method} with params ${JSON.stringify(params)}`);
   }
 
   const { value, timestamp } = cacheEntry;
@@ -122,9 +127,7 @@ function getCacheValue(method) {
   const now = Date.now();
   if (now - timestamp > cacheKeyTimeout) {
     const ageMs = now - timestamp;
-
-    throw new Error(`{"error":{"code":-69004,"message":"Cache stale: Value for method ${method} is ${ageMs}ms old (threshold: ${cacheKeyTimeout}ms)"}}`);
-    // throw new Error(`Cache stale: Value for method ${method} is ${ageMs}ms old (threshold: ${cacheKeyTimeout}ms)`);
+    throw new Error(`{"error":{"code":-69004,"message":"Cache stale: Value for method ${method} with params ${JSON.stringify(params)} is ${ageMs}ms old (threshold: ${cacheKeyTimeout}ms)"}}`);
   }
   
   return value;
@@ -133,7 +136,9 @@ function getCacheValue(method) {
 async function handleCachedRequest(req, res) {
   console.log("💾 Using cached request mechanism");
   try {    
-    const value = getCacheValue(req.body.method);
+    // Handle case where params is undefined or not present in the request
+    const params = req.body.params === undefined ? [] : req.body.params;
+    const value = getCacheValue(req.body.method, params);
     return {
       success: true,
       data: {

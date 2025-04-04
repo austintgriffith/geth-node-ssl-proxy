@@ -60,9 +60,9 @@ app.post("/", validateRpcRequest, async (req, res) => {
   try {
     // Check if method is cached and parameters match
     const cacheMap = getCacheMap();
-    const cachedMethod = cacheMap.get(req.body.method);
-    const isCachedMethod = cachedMethod && 
-                          JSON.stringify(cachedMethod.params) === JSON.stringify(req.body.params || []);
+    const params = req.body.params === undefined ? [] : req.body.params;
+    const cacheKey = `${req.body.method}:${JSON.stringify(params)}`;
+    const isCachedMethod = cacheMap.has(cacheKey);
 
     if (isCachedMethod) {
       try {
