@@ -68,21 +68,23 @@ function connectWebSocket() {
       
       // Emit event when cached methods change
       cacheEvents.emit('cachedMethodsUpdated', Array.from(cachedMethods));
+      console.log(`Updated cached method: ${method} | Params: ${JSON.stringify(params)} | Value: ${value}`);
 
-      console.log('\n=== Cached RPC Methods ===\n');
-      Array.from(cachedMethods).forEach(method => {
-          // Find all cache entries for this method
-          for (const [key, cacheData] of cacheMap.entries()) {
-              if (key.startsWith(method + ':')) {
-                  const timestamp = new Date(cacheData.timestamp).toLocaleString();
-                  console.log(`Method: ${method}`);
-                  console.log(`Params: ${JSON.stringify(cacheData.params)}`);
-                  console.log(`Value: ${cacheData.value}`);
-                  console.log(`Last Updated: ${timestamp}`);
-                  console.log('-------------------');
-              }
-          }
-      });
+      // Please dont delete this, it's useful for debugging
+      // console.log('\n=== Cached RPC Methods ===\n');
+      // Array.from(cachedMethods).forEach(method => {
+      //     // Find all cache entries for this method
+      //     for (const [key, cacheData] of cacheMap.entries()) {
+      //         if (key.startsWith(method + ':')) {
+      //             const timestamp = new Date(cacheData.timestamp).toLocaleString();
+      //             console.log(`Method: ${method}`);
+      //             console.log(`Params: ${JSON.stringify(cacheData.params)}`);
+      //             console.log(`Value: ${cacheData.value}`);
+      //             console.log(`Last Updated: ${timestamp}`);
+      //             console.log('-------------------');
+      //         }
+      //     }
+      // });
     } catch (error) {
       console.error('Error processing WebSocket message:', error);
     }
