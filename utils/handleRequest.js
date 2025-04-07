@@ -15,7 +15,6 @@ async function handleRequest(req, res, type) {
 
   try {    
     const result = await makeRequest(req.body, req.headers, type);
-    // console.log("RPC Response:", result);
     return { success: true, data: result };
   } catch (error) {    
     // If the error is already in JSON-RPC format, pass it through
@@ -24,8 +23,14 @@ async function handleRequest(req, res, type) {
       return { success: false, error: error };
     }
     
+    // For axios errors with response data, pass through the RPC error
+    if (error.response?.data) {
+      console.log("❌ Request failed:", error.response.data);
+      return { success: false, error: error.response.data };
+    }
+    
     // For other errors, format them as before
-    const errorDetails = error.response?.data?.error || error.error || error;
+    const errorDetails = error.error || error;
     console.log("❌ Request failed:", {
       message: errorDetails.message || error.message,
       code: errorDetails.code,
@@ -60,6 +65,13 @@ async function makeRequest(body, headers, type) {
     
     const requestBody = typeof body === 'string' ? JSON.parse(body) : body;
     
+    // Debug log the request
+    console.log(`🔍 ${type.toUpperCase()} Request:`, {
+      url,
+      body: requestBody,
+      headers: cleanedHeaders
+    });
+    
     const axiosConfig = {
       headers: {
         "Content-Type": "application/json",
@@ -76,13 +88,24 @@ async function makeRequest(body, headers, type) {
     const response = await axios.post(url, requestBody, axiosConfig);
     return response.data;
   } catch (error) {
-    // Simplified error logging for network/request errors
+    // Debug log the error response
+    if (error.response) {
+      console.log(`🔍 ${type.toUpperCase()} Error Response:`, {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+    }
+    
+    // Pass through the error response from the RPC provider
     if (error.response?.data) {
       throw error.response.data;
     }
     
     if (error.code === 'ECONNABORTED') {
       throw {
+        jsonrpc: "2.0",
+        id: body.id,
         error: {
           code: -32603,
           message: `Request timed out after ${fallbackRequestTimeout/1000} seconds`
@@ -91,6 +114,8 @@ async function makeRequest(body, headers, type) {
     }
     
     throw {
+      jsonrpc: "2.0",
+      id: body.id,
       error: {
         code: -32603,
         message: error.message || "Unknown error"

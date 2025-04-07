@@ -135,17 +135,17 @@ function getCacheValue(method, params) {
   return value;
 }
 
-async function handleCachedRequest(req, res) {
+async function handleCachedRequest(reqBody, res) {
   console.log("💾 Using cached request mechanism");
   try {    
     // Handle case where params is undefined or not present in the request
-    const params = req.body.params === undefined ? [] : req.body.params;
-    const value = getCacheValue(req.body.method, params);
+    const params = reqBody.params === undefined ? [] : reqBody.params;
+    const value = getCacheValue(reqBody.method, params);
     return {
       success: true,
       data: {
         jsonrpc: "2.0",
-        id: req.body.id,
+        id: reqBody.id,
         result: value
       }
     };

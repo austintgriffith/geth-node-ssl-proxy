@@ -31,6 +31,35 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Function to transform latest to block number if conditions are met
+function transformLatestToBlockNumber(method, params, cacheMap) {
+  // Check if params contains "latest"
+  const latestIndex = params.findIndex(param => param === "latest");
+  if (latestIndex === -1) return params;
+
+  // Check if eth_blockNumber is in cache
+  const blockNumberKey = `${'eth_blockNumber'}:${JSON.stringify([])}`;
+  const blockNumberEntry = cacheMap.get(blockNumberKey);
+  if (!blockNumberEntry) return params;
+
+  // Check if block number is less than 15 seconds old
+  const now = Date.now();
+  if (now - blockNumberEntry.timestamp > 15000) return params;
+
+  // Transform latest to block number
+  const transformedParams = [...params];
+  const blockNumber = blockNumberEntry.value;
+  console.log("🔍 Block number format:", {
+    original: blockNumber,
+    type: typeof blockNumber,
+    isHex: blockNumber.startsWith('0x'),
+    length: blockNumber.length
+  });
+  
+  transformedParams[latestIndex] = blockNumber;
+  return transformedParams;
+}
+
 // Create the internal HTTPS server for cacheMap endpoint
 const internalServer = https.createServer(
   {
@@ -79,16 +108,29 @@ app.post("/", validateRpcRequest, async (req, res) => {
   let response;
 
   try {
-    // Check if method is cached and parameters match
+    // Transform latest to block number if conditions are met
     const cacheMap = getCacheMap();
     const params = req.body.params === undefined ? [] : req.body.params;
-    const cacheKey = `${req.body.method}:${JSON.stringify(params)}`;
+    
+    // Create a deep copy of the request body to avoid modifying the original
+    const requestBody = JSON.parse(JSON.stringify(req.body));
+    const transformedParams = transformLatestToBlockNumber(requestBody.method, params, cacheMap);
+    
+    // Update request body with transformed params while maintaining JSON-RPC format
+    requestBody.params = transformedParams;
+    requestBody.jsonrpc = "2.0"; // Ensure JSON-RPC version is set
+    requestBody.id = requestBody.id; // Ensure ID is set
+
+    console.log("🔄 Transformed request:", requestBody);
+
+    // Check if method is cached and parameters match
+    const cacheKey = `${requestBody.method}:${JSON.stringify(transformedParams)}`;
     const isCachedMethod = cacheMap.has(cacheKey);
 
     if (isCachedMethod) {
       try {
         const cacheStartTime = performance.now();
-        const cacheResult = await handleCachedRequest(req, res);
+        const cacheResult = await handleCachedRequest(requestBody, res);
         const cacheDuration = (performance.now() - cacheStartTime).toFixed(3);
         
         // Log cache attempt - only include full details for errors
