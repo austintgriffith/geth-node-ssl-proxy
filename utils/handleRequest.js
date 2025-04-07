@@ -65,13 +65,6 @@ async function makeRequest(body, headers, type) {
     
     const requestBody = typeof body === 'string' ? JSON.parse(body) : body;
     
-    // Debug log the request
-    console.log(`🔍 ${type.toUpperCase()} Request:`, {
-      url,
-      body: requestBody,
-      headers: cleanedHeaders
-    });
-    
     const axiosConfig = {
       headers: {
         "Content-Type": "application/json",

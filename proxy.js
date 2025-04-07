@@ -97,7 +97,10 @@ server.listen(proxyPortPublic, () => {
 
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("-----------------------------------------------------------------------------------------");
-  console.log("📡 RPC REQUEST", req.body);
+  // DON't delete this
+  // console.log("📡 RPC REQUEST", req.body);
+  console.log("📡 Req.headers:", req.headers);
+  console.log("📡 Req.body:", req.body);
 
   const startTime = performance.now();
   const now = new Date();
@@ -112,25 +115,27 @@ app.post("/", validateRpcRequest, async (req, res) => {
     const cacheMap = getCacheMap();
     const params = req.body.params === undefined ? [] : req.body.params;
     
-    // Create a deep copy of the request body to avoid modifying the original
-    const requestBody = JSON.parse(JSON.stringify(req.body));
-    const transformedParams = transformLatestToBlockNumber(requestBody.method, params, cacheMap);
-    
-    // Update request body with transformed params while maintaining JSON-RPC format
-    requestBody.params = transformedParams;
-    requestBody.jsonrpc = "2.0"; // Ensure JSON-RPC version is set
-    requestBody.id = requestBody.id; // Ensure ID is set
+    // Transform the params and update the original request body
+    const transformedParams = transformLatestToBlockNumber(req.body.method, params, cacheMap);
+    req.body.params = transformedParams;
+    req.body.jsonrpc = "2.0"; // Ensure JSON-RPC version is set
+    req.body.id = req.body.id; // Ensure ID is set
 
-    console.log("🔄 Transformed request:", requestBody);
+    // Update content-length header to match new body length
+    const newBodyString = JSON.stringify(req.body);
+    req.headers['content-length'] = Buffer.byteLength(newBodyString);
+
+    console.log("📡 New Req.headers:", req.headers);
+    console.log("📡 New Req.body:", req.body);
 
     // Check if method is cached and parameters match
-    const cacheKey = `${requestBody.method}:${JSON.stringify(transformedParams)}`;
+    const cacheKey = `${req.body.method}:${JSON.stringify(transformedParams)}`;
     const isCachedMethod = cacheMap.has(cacheKey);
 
     if (isCachedMethod) {
       try {
         const cacheStartTime = performance.now();
-        const cacheResult = await handleCachedRequest(requestBody, res);
+        const cacheResult = await handleCachedRequest(req.body, res);
         const cacheDuration = (performance.now() - cacheStartTime).toFixed(3);
         
         // Log cache attempt - only include full details for errors
