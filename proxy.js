@@ -98,9 +98,12 @@ server.listen(proxyPortPublic, () => {
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("-----------------------------------------------------------------------------------------");
   // DON't delete this
-  // console.log("📡 RPC REQUEST", req.body);
-  console.log("📡 Req.headers:", req.headers);
-  console.log("📡 Req.body:", req.body);
+  console.log("📡 RPC REQUEST", req.body);
+  // console.log("📡 Req.headers:", req.headers);
+
+  // Create a deep copy of just the necessary request properties
+  // Used for fallback requests b/c don't know if officebox is on the same block as pool nodes
+  const reqOriginal = req;
 
   const startTime = performance.now();
   const now = new Date();
@@ -125,7 +128,8 @@ app.post("/", validateRpcRequest, async (req, res) => {
     const newBodyString = JSON.stringify(req.body);
     req.headers['content-length'] = Buffer.byteLength(newBodyString);
 
-    console.log("📡 New Req.headers:", req.headers);
+    // Don't delete this
+    // console.log("📡 New Req.headers:", req.headers);
     console.log("📡 New Req.body:", req.body);
 
     // Check if method is cached and parameters match
@@ -163,11 +167,11 @@ app.post("/", validateRpcRequest, async (req, res) => {
             // Pool failed, try fallback
             console.log("🔄 Pool request failed, trying fallback...");
             const fallbackStartTime = performance.now();
-            const fallbackResult = await handleRequest(req, res, 'fallback');
+            const fallbackResult = await handleRequest(reqOriginal, res, 'fallback');
             const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
             
             // Log fallback attempt - only include full details for errors
-            logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
+            logRequest(reqOriginal, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
             
             requestType = 'fallback';
             if (fallbackResult.success) {
@@ -201,11 +205,11 @@ app.post("/", validateRpcRequest, async (req, res) => {
           // Pool failed, try fallback
           console.log("🔄 Pool request failed, trying fallback...");
           const fallbackStartTime = performance.now();
-          const fallbackResult = await handleRequest(req, res, 'fallback');
+          const fallbackResult = await handleRequest(reqOriginal, res, 'fallback');
           const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
           
           // Log fallback attempt - only include full details for errors
-          logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
+          logRequest(reqOriginal, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
           
           requestType = 'fallback';
           if (fallbackResult.success) {
@@ -234,11 +238,11 @@ app.post("/", validateRpcRequest, async (req, res) => {
         // Pool failed, try fallback
         console.log("🔄 Pool request failed, trying fallback...");
         const fallbackStartTime = performance.now();
-        const fallbackResult = await handleRequest(req, res, 'fallback');
+        const fallbackResult = await handleRequest(reqOriginal, res, 'fallback');
         const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
         
         // Log fallback attempt - only include full details for errors
-        logRequest(req, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
+        logRequest(reqOriginal, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
         
         requestType = 'fallback';
         if (fallbackResult.success) {

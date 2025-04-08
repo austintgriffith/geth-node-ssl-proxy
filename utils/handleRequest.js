@@ -23,12 +23,6 @@ async function handleRequest(req, res, type) {
       return { success: false, error: error };
     }
     
-    // For axios errors with response data, pass through the RPC error
-    if (error.response?.data) {
-      console.log("❌ Request failed:", error.response.data);
-      return { success: false, error: error.response.data };
-    }
-    
     // For other errors, format them as before
     const errorDetails = error.error || error;
     console.log("❌ Request failed:", {
@@ -81,24 +75,13 @@ async function makeRequest(body, headers, type) {
     const response = await axios.post(url, requestBody, axiosConfig);
     return response.data;
   } catch (error) {
-    // Debug log the error response
-    if (error.response) {
-      console.log(`🔍 ${type.toUpperCase()} Error Response:`, {
-        status: error.response.status,
-        data: error.response.data,
-        headers: error.response.headers
-      });
-    }
-    
-    // Pass through the error response from the RPC provider
+    // Simplified error logging for network/request errors
     if (error.response?.data) {
       throw error.response.data;
     }
     
     if (error.code === 'ECONNABORTED') {
       throw {
-        jsonrpc: "2.0",
-        id: body.id,
         error: {
           code: -32603,
           message: `Request timed out after ${fallbackRequestTimeout/1000} seconds`
@@ -107,8 +90,6 @@ async function makeRequest(body, headers, type) {
     }
     
     throw {
-      jsonrpc: "2.0",
-      id: body.id,
       error: {
         code: -32603,
         message: error.message || "Unknown error"
