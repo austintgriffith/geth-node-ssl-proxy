@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const EventEmitter = require('events');
 const fs = require('fs');
 
-const { poolPort, blockNumberCacheTimeout, cacheMaxRetries, cacheRetryDelay, blockNumberCacheTimeout } = require('../config');
+const { poolPort, blockNumberCacheTimeout, cacheMaxRetries, cacheRetryDelay, cacheMethodCleanupTimeout } = require('../config');
 
 // Create event emitter for cache updates
 const cacheEvents = new EventEmitter();
@@ -199,7 +199,7 @@ function clearOldCachedMethods() {
     }
     
     // Check if the cache entry is older than the cleanup interval
-    if (now - cacheData.timestamp > blockNumberCacheTimeout) {
+    if (now - cacheData.timestamp > cacheMethodCleanupTimeout) {
       methodsToRemove.add(method);
       cacheMap.delete(key);
       console.log(`🧹 Removed stale cache entry: ${key}`);
