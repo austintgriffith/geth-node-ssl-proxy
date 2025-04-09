@@ -7,6 +7,7 @@ const fallbackRequestTimeout = 5000; // 5 seconds
 const cacheMaxRetries = 50;
 const cacheRetryDelay = 5000; // 5 seconds
 const blockNumberCacheTimeout = 15000; // 15 second timeout
+const cacheMethodCleanupTimeout = 1000 * 60 * 60; // 1 hour
 
 const fallbackRequestLogPath = "/home/ubuntu/shared/fallbackRequests.log";
 const cacheRequestLogPath = "/home/ubuntu/shared/cacheRequests.log";
@@ -22,6 +23,7 @@ module.exports = {
   blockNumberCacheTimeout,
   cacheMaxRetries,
   cacheRetryDelay,
+  cacheMethodCleanupTimeout,
   
   fallbackRequestLogPath,
   cacheRequestLogPath,

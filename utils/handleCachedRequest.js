@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const EventEmitter = require('events');
 const fs = require('fs');
 
-const { poolPort, blockNumberCacheTimeout, cacheMaxRetries, cacheRetryDelay } = require('../config');
+const { poolPort, blockNumberCacheTimeout, cacheMaxRetries, cacheRetryDelay, blockNumberCacheTimeout } = require('../config');
 
 // Create event emitter for cache updates
 const cacheEvents = new EventEmitter();
@@ -176,6 +176,62 @@ function subscribeToCacheUpdates(callback) {
 function getCacheMap() {
   return cacheMap;
 }
+
+// Function to clear old cached methods
+function clearOldCachedMethods() {
+  console.log(`🧹 Running clearOldCachedMethods()`);
+  const now = Date.now();
+  let methodsToRemove = new Set();
+  
+  // Check each cache entry
+  for (const [key, cacheData] of cacheMap.entries()) {
+    // Skip permanent cache entries (like eth_chainId)
+    if (cacheData.timestamp === null) {
+      continue;
+    }
+    
+    // Extract the method name from the key
+    const method = key.split(':')[0];
+    
+    // Skip eth_blockNumber and eth_chainId methods
+    if (method === 'eth_blockNumber' || method === 'eth_chainId') {
+      continue;
+    }
+    
+    // Check if the cache entry is older than the cleanup interval
+    if (now - cacheData.timestamp > blockNumberCacheTimeout) {
+      methodsToRemove.add(method);
+      cacheMap.delete(key);
+      console.log(`🧹 Removed stale cache entry: ${key}`);
+    }
+  }
+  
+  // Update cachedMethods set
+  for (const method of methodsToRemove) {
+    // Check if there are any remaining entries for this method
+    let hasRemainingEntries = false;
+    for (const [key] of cacheMap.entries()) {
+      if (key.startsWith(method + ':')) {
+        hasRemainingEntries = true;
+        break;
+      }
+    }
+    
+    // If no entries remain for this method, remove it from cachedMethods
+    if (!hasRemainingEntries) {
+      cachedMethods.delete(method);
+      console.log(`🧹 Removed method from cachedMethods: ${method}`);
+    }
+  }
+  
+  // Emit event when cached methods change
+  if (methodsToRemove.size > 0) {
+    cacheEvents.emit('cachedMethodsUpdated', Array.from(cachedMethods));
+  }
+}
+
+// Set up interval to clear old cached methods every 10 seconds
+setInterval(clearOldCachedMethods, 1000 * 60 * 60);
 
 module.exports = { 
   handleCachedRequest,
