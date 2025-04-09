@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const EventEmitter = require('events');
 const fs = require('fs');
 
-const { poolPort, cacheKeyTimeout, cacheMaxRetries, cacheRetryDelay } = require('../config');
+const { poolPort, blockNumberCacheTimeout, cacheMaxRetries, cacheRetryDelay } = require('../config');
 
 // Create event emitter for cache updates
 const cacheEvents = new EventEmitter();
@@ -125,11 +125,13 @@ function getCacheValue(method, params) {
     return value;
   }
   
-  // Check if cache is stale
-  const now = Date.now();
-  if (now - timestamp > cacheKeyTimeout) {
-    const ageMs = now - timestamp;
-    throw new Error(`{"error":{"code":-69004,"message":"Cache stale: Value for method ${method} with params ${JSON.stringify(params)} is ${ageMs}ms old (threshold: ${cacheKeyTimeout}ms)"}}`);
+  // Check if cache is stale - only for eth_blockNumber method
+  if (method === 'eth_blockNumber') {
+    const now = Date.now();
+    if (now - timestamp > blockNumberCacheTimeout) {
+      const ageMs = now - timestamp;
+      throw new Error(`{"error":{"code":-69004,"message":"Cache stale: Value for method ${method} with params ${JSON.stringify(params)} is ${ageMs}ms old (threshold: ${blockNumberCacheTimeout}ms)"}}`);
+    }
   }
   
   return value;

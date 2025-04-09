@@ -6,7 +6,7 @@ const poolPort = 3003;
 const fallbackRequestTimeout = 5000; // 5 seconds
 const cacheMaxRetries = 50;
 const cacheRetryDelay = 5000; // 5 seconds
-const cacheKeyTimeout = 15000; // 15 second timeout
+const blockNumberCacheTimeout = 15000; // 15 second timeout
 
 const fallbackRequestLogPath = "/home/ubuntu/shared/fallbackRequests.log";
 const cacheRequestLogPath = "/home/ubuntu/shared/cacheRequests.log";
@@ -19,7 +19,7 @@ module.exports = {
   proxyPort,
   poolPort,
   fallbackRequestTimeout,
-  cacheKeyTimeout,
+  blockNumberCacheTimeout,
   cacheMaxRetries,
   cacheRetryDelay,
   
