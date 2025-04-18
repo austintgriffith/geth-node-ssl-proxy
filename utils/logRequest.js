@@ -5,12 +5,16 @@ function logRequest(req, startTime, utcTimestamp, duration, status, type) {
   const { method, params } = req.body;
 
   // Get request origin from headers
-  let reqHost = req.get('Referer') || req.get('Origin') || req.get('host');
-  try {
-    const url = new URL(reqHost);
-    reqHost = url.hostname;
-  } catch (error) {
-    reqHost = req.get('host').split(':')[0];
+  let reqHost = req.get('origin') || req.get('Referer') || req.get('host');
+  
+  // Only try URL parsing if it's not a direct origin header
+  if (!req.get('origin')) {
+    try {
+      const url = new URL(reqHost);
+      reqHost = url.hostname;
+    } catch (error) {
+      reqHost = req.get('host').split(':')[0];
+    }
   }
 
   // Format status properly - if it's an object, stringify it, otherwise use as is

@@ -99,7 +99,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
   console.log("-----------------------------------------------------------------------------------------");
   // DON't delete this
   console.log("📡 RPC REQUEST", req.body);
-  // console.log("📡 Req.headers:", req.headers);
+  // console.log("📡 HEADERS:", req.headers);
 
   // Create a deep copy of just the necessary request properties
   // Used for fallback requests b/c don't know if officebox is on the same block as pool nodes
