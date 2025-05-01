@@ -13,6 +13,7 @@ const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('.
 const { logRequest } = require('./utils/logRequest');
 
 const { proxyPortPublic, proxyPort } = require('./config');
+const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
 
 // Initialize with empty array, will be updated by cache service
 let cachedMethods = [];
@@ -159,10 +160,20 @@ app.post("/", validateRpcRequest, async (req, res) => {
           // Log pool attempt - only include full details for errors
           logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : poolResult.error, 'pool');
           
-          requestType = 'pool';
           if (poolResult.success) {
+            requestType = 'pool';
             response = poolResult.data;
             status = "success";
+          } else if (
+            poolResult.error &&
+            poolResult.error.error &&
+            ignoredErrorCodes.includes(poolResult.error.error.code)
+          ) {
+            // Do NOT try fallback for execution reverted
+            response = poolResult.error;
+            status = "error";
+            const errorCode = poolResult.error.error.code;
+            console.log(`⛔ Ignored Error code: ${errorCode}, not retrying with fallback.`);
           } else {
             // Pool failed, try fallback
             console.log("🔄 Pool request failed, trying fallback...");
@@ -197,10 +208,20 @@ app.post("/", validateRpcRequest, async (req, res) => {
         // Log pool attempt - only include full details for errors
         logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : poolResult.error, 'pool');
         
-        requestType = 'pool';
         if (poolResult.success) {
+          requestType = 'pool';
           response = poolResult.data;
           status = "success";
+        } else if (
+          poolResult.error &&
+          poolResult.error.error &&
+          ignoredErrorCodes.includes(poolResult.error.error.code)
+        ) {
+          // Do NOT try fallback for execution reverted
+          response = poolResult.error;
+          status = "error";
+          const errorCode = poolResult.error.error.code;
+          console.log(`⛔ Ignored Error code: ${errorCode}, not retrying with fallback.`);
         } else {
           // Pool failed, try fallback
           console.log("🔄 Pool request failed, trying fallback...");
@@ -234,6 +255,16 @@ app.post("/", validateRpcRequest, async (req, res) => {
       if (poolResult.success) {
         response = poolResult.data;
         status = "success";
+      } else if (
+        poolResult.error &&
+        poolResult.error.error &&
+        ignoredErrorCodes.includes(poolResult.error.error.code)
+      ) {
+        // Do NOT try fallback for execution reverted
+        response = poolResult.error;
+        status = "error";
+        const errorCode = poolResult.error.error.code;
+        console.log(`⛔ Ignored Error code: ${errorCode}, not retrying with fallback.`);
       } else {
         // Pool failed, try fallback
         console.log("🔄 Pool request failed, trying fallback...");
