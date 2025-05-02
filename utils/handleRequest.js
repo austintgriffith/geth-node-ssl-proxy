@@ -35,8 +35,8 @@ async function handleRequest(req, res, type) {
         jsonrpc: "2.0",
         id: req.body.id,
         error: {
-            code: -32603,
-            message: "Internal error",
+            code: -70000,
+            message: "Internal Proxy service error",
             data: errorDetails.message || error.message
         }
     };
@@ -83,15 +83,15 @@ async function makeRequest(body, headers, type) {
     if (error.code === 'ECONNABORTED') {
       throw {
         error: {
-          code: -32603,
-          message: `Request timed out after ${fallbackRequestTimeout/1000} seconds`
+          code: -69008,
+          message: `Fallback Request timed out after ${fallbackRequestTimeout/1000} seconds`
         }
       };
     }
     
     throw {
       error: {
-        code: -32603,
+        code: -70000,
         message: error.message || "Unknown error"
       }
     };
