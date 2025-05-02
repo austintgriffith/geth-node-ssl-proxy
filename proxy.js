@@ -302,8 +302,8 @@ app.post("/", validateRpcRequest, async (req, res) => {
       jsonrpc: "2.0",
       id: req.body.id,
       error: {
-        code: -32603,
-        message: "Internal error",
+        code: -70000,
+        message: "Internal Proxy error",
         data: error.response?.data?.error?.message || error.message
       }
     };
@@ -311,6 +311,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType);
 
     // Send error response
+    // TODO: Should this actually be 500?
     res.status(200).json(errorResponse);
   }
   console.log("-----------------------------------------------------------------------------------------");
