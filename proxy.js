@@ -292,7 +292,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
       res.json(response);
     } else {
       console.log(`❌ Request failed`);
-      res.status(500).json(response);
+      res.status(200).json(response);
     }
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(3);
@@ -311,7 +311,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType);
 
     // Send error response
-    res.status(500).json(errorResponse);
+    res.status(200).json(errorResponse);
   }
   console.log("-----------------------------------------------------------------------------------------");
 });
