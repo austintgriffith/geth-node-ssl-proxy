@@ -308,11 +308,11 @@ app.post("/", validateRpcRequest, async (req, res) => {
     // Only send response after all attempts are complete
     if (status === "success") {
       console.log(`⏱️ Request completed with status: ${status}`);
-      res.json(response);
-      sendTelegramAlert(`Proxy.js Request completed: ${JSON.stringify(response, null, 2)}`);
+      res.json(response);      
     } else {
       console.log(`❌ Request failed`);
       res.status(200).json(response);
+      sendTelegramAlert(`🚨 Stage RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`);
     }
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(3);
