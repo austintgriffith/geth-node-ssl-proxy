@@ -6,6 +6,14 @@ const { performance } = require('perf_hooks');
 var bodyParser = require("body-parser");
 const app = express();
 const internalApp = express();
+const TelegramBot = require("node-telegram-bot-api");
+
+require("dotenv").config();
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_IDS = process.env.TELEGRAM_CHAT_IDS
+  ? process.env.TELEGRAM_CHAT_IDS.split(",").map((id) => id.trim())
+  : [];
+const telegramBot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleRequest } = require('./utils/handleRequest');
@@ -95,6 +103,17 @@ server.listen(proxyPortPublic, () => {
   console.log("----------------------------------------------------------------------------------------------------------------");
   console.log(`HTTPS server listening on port ${proxyPortPublic}...`);
 });
+
+function sendTelegramAlert(message) {
+  TELEGRAM_CHAT_IDS.forEach((chatId) => {
+    telegramBot
+      .sendMessage(chatId, message)
+      .then(() => console.log(`Telegram alert sent to ${chatId}!`))
+      .catch((err) =>
+        console.error(`Telegram alert error for ${chatId}:`, err)
+      );
+  });
+}
 
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("-----------------------------------------------------------------------------------------");
@@ -290,6 +309,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     if (status === "success") {
       console.log(`⏱️ Request completed with status: ${status}`);
       res.json(response);
+      sendTelegramAlert(`Proxy.js Request completed: ${JSON.stringify(response, null, 2)}`);
     } else {
       console.log(`❌ Request failed`);
       res.status(200).json(response);
