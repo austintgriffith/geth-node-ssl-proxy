@@ -304,7 +304,6 @@ app.post("/", validateRpcRequest, async (req, res) => {
         }
       }
     }
-
     // Only send response after all attempts are complete
     if (status === "success") {
       console.log(`⏱️ Request completed with status: ${status}`);
@@ -329,6 +328,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     };
     
     logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType);
+    sendTelegramAlert(`🚨 Stage RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`);
 
     // Send error response
     // TODO: Should this actually be 500?
