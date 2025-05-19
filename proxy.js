@@ -343,7 +343,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     } else {
       console.log(`❌ Request failed`);
       res.status(200).json(response);
-      sendTelegramAlert(`🚨 Stage RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`);
+      sendTelegramAlert(`🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`);
     }
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(3);
@@ -360,7 +360,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     };
     
     logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType);
-    sendTelegramAlert(`🚨 Stage RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`);
+    sendTelegramAlert(`🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`);
 
     // Send error response
     // TODO: Should this actually be 500?
