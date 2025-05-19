@@ -104,7 +104,11 @@ server.listen(proxyPortPublic, () => {
   console.log(`HTTPS server listening on port ${proxyPortPublic}...`);
 });
 
-function sendTelegramAlert(message) {
+function sendTelegramAlert(message, errorCode) {
+  if (typeof errorCode !== 'undefined' && ignoredErrorCodes.includes(errorCode)) {
+    console.log(`🚫 Not sending Telegram alert for ignored error code: ${errorCode}`);
+    return;
+  }
   TELEGRAM_CHAT_IDS.forEach((chatId) => {
     telegramBot
       .sendMessage(chatId, message)
@@ -343,7 +347,9 @@ app.post("/", validateRpcRequest, async (req, res) => {
     } else {
       console.log(`❌ Request failed`);
       res.status(200).json(response);
-      sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`);
+      // Pass error code if available
+      const errorCode = response && response.error && typeof response.error.code !== 'undefined' ? response.error.code : undefined;
+      sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`, errorCode);
     }
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(3);
@@ -360,7 +366,8 @@ app.post("/", validateRpcRequest, async (req, res) => {
     };
     
     logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType);
-    sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`);
+    // Pass error code if available
+    sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`, errorResponse.error.code);
 
     // Send error response
     // TODO: Should this actually be 500?
