@@ -20,7 +20,7 @@ const { handleRequest } = require('./utils/handleRequest');
 const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('./utils/handleCachedRequest');
 const { logRequest } = require('./utils/logRequest');
 
-const { proxyPortPublic, proxyPort } = require('./config');
+const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold } = require('./config');
 const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
 
 // Initialize with empty array, will be updated by cache service
@@ -115,6 +115,26 @@ function sendTelegramAlert(message) {
   });
 }
 
+// Track fallback request timestamps for rate monitoring
+const fallbackTimestamps = [];
+// Track last alert time to avoid spamming alerts
+let lastFallbackAlertTime = 0;
+
+function checkFallbackRateAndAlert() {
+  const now = Date.now();
+  // Remove timestamps older than 1 hour
+  while (fallbackTimestamps.length && fallbackTimestamps[0] < now - 60 * 60 * 1000) {
+    fallbackTimestamps.shift();
+  }
+  if (
+    fallbackTimestamps.length > fallbackRateAlertThreshold &&
+    (now - lastFallbackAlertTime > 60 * 60 * 1000)
+  ) {
+    sendTelegramAlert(`🚨 More than ${fallbackRateAlertThreshold} fallback requests in the last hour`);
+    lastFallbackAlertTime = now;
+  }
+}
+
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("-----------------------------------------------------------------------------------------");
   // DON't delete this
@@ -207,9 +227,13 @@ app.post("/", validateRpcRequest, async (req, res) => {
             if (fallbackResult.success) {
               response = fallbackResult.data;
               status = "success";
+              fallbackTimestamps.push(Date.now());
+              checkFallbackRateAndAlert();
             } else {
               response = fallbackResult.error;
               status = "error";
+              fallbackTimestamps.push(Date.now());
+              checkFallbackRateAndAlert();
             }
           }
         }
@@ -255,9 +279,13 @@ app.post("/", validateRpcRequest, async (req, res) => {
           if (fallbackResult.success) {
             response = fallbackResult.data;
             status = "success";
+            fallbackTimestamps.push(Date.now());
+            checkFallbackRateAndAlert();
           } else {
             response = fallbackResult.error;
             status = "error";
+            fallbackTimestamps.push(Date.now());
+            checkFallbackRateAndAlert();
           }
         }
       }
@@ -298,9 +326,13 @@ app.post("/", validateRpcRequest, async (req, res) => {
         if (fallbackResult.success) {
           response = fallbackResult.data;
           status = "success";
+          fallbackTimestamps.push(Date.now());
+          checkFallbackRateAndAlert();
         } else {
           response = fallbackResult.error;
           status = "error";
+          fallbackTimestamps.push(Date.now());
+          checkFallbackRateAndAlert();
         }
       }
     }
