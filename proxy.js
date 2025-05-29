@@ -343,6 +343,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     // Only send response after all attempts are complete
     if (status === "success") {
       console.log(`⏱️ Request completed with status: ${status}`);
+      console.log("📡 Response:", response);
       res.json(response);      
     } else {
       console.log(`❌ Request failed`);
