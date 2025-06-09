@@ -139,6 +139,25 @@ function checkFallbackRateAndAlert() {
   }
 }
 
+// Simple function to validate and return fallback response or alert if invalid JSON
+function validateFallbackResponse(response, originalRequest) {
+  try {
+    // Try to stringify and parse to ensure valid JSON
+    if (typeof response === 'object') {
+      JSON.stringify(response);
+      return response;
+    }
+    if (typeof response === 'string') {
+      return JSON.parse(response);
+    }
+    throw new Error('Response is not valid JSON');
+  } catch (error) {
+    console.log('🚨 Invalid JSON from fallback provider:', response);
+    sendTelegramAlert(`🚨 INVALID JSON FROM FALLBACK\nRequest: ${JSON.stringify(originalRequest)}\nResponse: ${response}\nError: ${error.message}`);
+    return response; // Return original response even if invalid
+  }
+}
+
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("-----------------------------------------------------------------------------------------");
   // DON't delete this
@@ -229,7 +248,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
             
             requestType = 'fallback';
             if (fallbackResult.success) {
-              response = fallbackResult.data;
+              response = validateFallbackResponse(fallbackResult.data, reqOriginal.body);
               status = "success";
               fallbackTimestamps.push(Date.now());
               checkFallbackRateAndAlert();
@@ -281,7 +300,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
           
           requestType = 'fallback';
           if (fallbackResult.success) {
-            response = fallbackResult.data;
+            response = validateFallbackResponse(fallbackResult.data, reqOriginal.body);
             status = "success";
             fallbackTimestamps.push(Date.now());
             checkFallbackRateAndAlert();
@@ -328,7 +347,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
         
         requestType = 'fallback';
         if (fallbackResult.success) {
-          response = fallbackResult.data;
+          response = validateFallbackResponse(fallbackResult.data, reqOriginal.body);
           status = "success";
           fallbackTimestamps.push(Date.now());
           checkFallbackRateAndAlert();
