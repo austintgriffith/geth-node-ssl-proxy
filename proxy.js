@@ -6,19 +6,14 @@ const { performance } = require('perf_hooks');
 var bodyParser = require("body-parser");
 const app = express();
 const internalApp = express();
-const TelegramBot = require("node-telegram-bot-api");
 
 require("dotenv").config();
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_IDS = process.env.TELEGRAM_CHAT_IDS
-  ? process.env.TELEGRAM_CHAT_IDS.split(",").map((id) => id.trim())
-  : [];
-const telegramBot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleRequest } = require('./utils/handleRequest');
 const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('./utils/handleCachedRequest');
 const { logRequest } = require('./utils/logRequest');
+const { sendTelegramAlert } = require('./utils/telegramUtils');
 
 const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold } = require('./config');
 const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
@@ -103,21 +98,6 @@ server.listen(proxyPortPublic, () => {
   console.log("----------------------------------------------------------------------------------------------------------------");
   console.log(`HTTPS server listening on port ${proxyPortPublic}...`);
 });
-
-function sendTelegramAlert(message, errorCode) {
-  if (typeof errorCode !== 'undefined' && ignoredErrorCodes.includes(errorCode)) {
-    console.log(`🚫 Not sending Telegram alert for ignored error code: ${errorCode}`);
-    return;
-  }
-  TELEGRAM_CHAT_IDS.forEach((chatId) => {
-    telegramBot
-      .sendMessage(chatId, message)
-      .then(() => console.log(`Telegram alert sent to ${chatId}!`))
-      .catch((err) =>
-        console.error(`Telegram alert error for ${chatId}:`, err)
-      );
-  });
-}
 
 // Track fallback request timestamps for rate monitoring
 const fallbackTimestamps = [];
