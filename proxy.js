@@ -138,6 +138,11 @@ function validateFallbackResponse(response, originalRequest) {
   }
 }
 
+// Watchdog endpoint for health checks
+app.get("/watchdog", (req, res) => {
+  res.json({ ok: true });
+});
+
 app.post("/", validateRpcRequest, async (req, res) => {
   console.log("-----------------------------------------------------------------------------------------");
   // DON't delete this
