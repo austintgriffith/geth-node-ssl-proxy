@@ -8,7 +8,7 @@ const fallbackRequestTimeout = 5000; // 5 seconds
 const cacheMaxRetries = 50;
 const cacheRetryDelay = 5000; // 5 seconds
 const blockNumberCacheTimeout = 19000; // 19 second timeout
-const cacheMethodCleanupTimeout = 1000 * 60 * 60 * 6; // 6 hours
+const cacheMethodCleanupTimeout = 1000 * 60 * 60 * 2; // 2 hours
 const fallbackRateAlertThreshold = 9; // Fallback requests per hour to trigger telegram alert
 
 const fallbackRequestLogPath = "/home/ubuntu/shared/fallbackRequests.log";
