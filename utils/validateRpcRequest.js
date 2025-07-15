@@ -7,6 +7,7 @@ function validateRpcRequest(req, res, next) {
     if (!method) reason.push('method missing');
     if (id === undefined) reason.push('id missing');
     console.log("‼️ Invalid Request: " + reason.join(", "));
+    console.log("Request object:", req.body);
 
     return res.status(400).send({
       jsonrpc: "2.0",
