@@ -143,11 +143,9 @@ app.get("/watchdog", (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/", validateRpcRequest, async (req, res) => {
-  console.log("-----------------------------------------------------------------------------------------");
-  // DON't delete this
+// Extract single request processing logic into a reusable function
+async function processSingleRequest(req) {
   console.log("📡 RPC REQUEST", req.body);
-  // console.log("📡 HEADERS:", req.headers);
 
   // Create a deep copy of just the necessary request properties
   // Used for fallback requests b/c don't know if officebox is on the same block as pool nodes
@@ -176,8 +174,6 @@ app.post("/", validateRpcRequest, async (req, res) => {
     const newBodyString = JSON.stringify(req.body);
     req.headers['content-length'] = Buffer.byteLength(newBodyString);
 
-    // Don't delete this
-    // console.log("📡 New Req.headers:", req.headers);
     console.log("📡 New Req.body:", req.body);
 
     // Check if method is cached and parameters match
@@ -187,7 +183,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     if (isCachedMethod) {
       try {
         const cacheStartTime = performance.now();
-        const cacheResult = await handleCachedRequest(req.body, res);
+        const cacheResult = await handleCachedRequest(req.body, null); // Pass null for res since we're returning response
         const cacheDuration = (performance.now() - cacheStartTime).toFixed(3);
         
         // Log cache attempt - only include full details for errors
@@ -201,7 +197,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
           // Cache failed, try pool
           console.log("🔄 Cache request failed, trying pool...");
           const poolStartTime = performance.now();
-          const poolResult = await handleRequest(req, res, 'pool');
+          const poolResult = await handleRequest(req, null, 'pool'); // Pass null for res
           const poolDuration = (performance.now() - poolStartTime).toFixed(3);
           
           // Log pool attempt - only include full details for errors
@@ -225,7 +221,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
             // Pool failed, try fallback
             console.log("🔄 Pool request failed, trying fallback...");
             const fallbackStartTime = performance.now();
-            const fallbackResult = await handleRequest(reqOriginal, res, 'fallback');
+            const fallbackResult = await handleRequest(reqOriginal, null, 'fallback'); // Pass null for res
             const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
             
             // Log fallback attempt - only include full details for errors
@@ -253,7 +249,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
         // Cache threw an error, try pool
         console.log("🔄 Cache request error, trying pool...", cacheError);
         const poolStartTime = performance.now();
-        const poolResult = await handleRequest(req, res, 'pool');
+        const poolResult = await handleRequest(req, null, 'pool'); // Pass null for res
         const poolDuration = (performance.now() - poolStartTime).toFixed(3);
         
         // Log pool attempt - only include full details for errors
@@ -277,7 +273,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
           // Pool failed, try fallback
           console.log("🔄 Pool request failed, trying fallback...");
           const fallbackStartTime = performance.now();
-          const fallbackResult = await handleRequest(reqOriginal, res, 'fallback');
+          const fallbackResult = await handleRequest(reqOriginal, null, 'fallback'); // Pass null for res
           const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
           
           // Log fallback attempt - only include full details for errors
@@ -300,7 +296,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
     } else {
       // Non-cached methods: Try pool first
       const poolStartTime = performance.now();
-      const poolResult = await handleRequest(req, res, 'pool');
+      const poolResult = await handleRequest(req, null, 'pool'); // Pass null for res
       const poolDuration = (performance.now() - poolStartTime).toFixed(3);
       
       // Log pool attempt - only include full details for errors
@@ -324,7 +320,7 @@ app.post("/", validateRpcRequest, async (req, res) => {
         // Pool failed, try fallback
         console.log("🔄 Pool request failed, trying fallback...");
         const fallbackStartTime = performance.now();
-        const fallbackResult = await handleRequest(reqOriginal, res, 'fallback');
+        const fallbackResult = await handleRequest(reqOriginal, null, 'fallback'); // Pass null for res
         const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
         
         // Log fallback attempt - only include full details for errors
@@ -344,17 +340,18 @@ app.post("/", validateRpcRequest, async (req, res) => {
         }
       }
     }
-    // Only send response after all attempts are complete
+    
+    // Handle response and alerts
     if (status === "success") {
       console.log(`⏱️ Request completed with status: ${status}`);
       console.log("📡 Response:", response);
-      res.json(response);      
+      return response;      
     } else {
       console.log(`❌ Request failed`);
-      res.status(200).json(response);
       // Pass error code if available
       const errorCode = response && response.error && typeof response.error.code !== 'undefined' ? response.error.code : undefined;
       sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`, errorCode);
+      return response;
     }
   } catch (error) {
     const duration = (performance.now() - startTime).toFixed(3);
@@ -374,10 +371,70 @@ app.post("/", validateRpcRequest, async (req, res) => {
     // Pass error code if available
     sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`, errorResponse.error.code);
 
-    // Send error response
-    // TODO: Should this actually be 500?
-    res.status(200).json(errorResponse);
+    return errorResponse;
   }
+}
+
+app.post("/", validateRpcRequest, async (req, res) => {
+  console.log("-----------------------------------------------------------------------------------------");
+  
+  // Check if this is a batch request (array of requests)
+  if (Array.isArray(req.body)) {
+    console.log("🔄 Processing batch request with", req.body.length, "requests");
+    
+    const batchResponses = [];
+    
+    // Process each request in the batch
+    for (let i = 0; i < req.body.length; i++) {
+      const individualRequest = req.body[i];
+      console.log(`📦 Processing batch request ${i + 1}/${req.body.length}:`, individualRequest);
+      
+      // Create a new request object for this individual request
+      // We need to preserve the Express request methods like req.get()
+      const individualReq = Object.create(req);
+      individualReq.body = individualRequest;
+      
+      try {
+        // Process this individual request using the extracted logic
+        const response = await processSingleRequest(individualReq);
+        batchResponses.push(response);
+      } catch (error) {
+        // If individual request fails, create error response
+        const errorResponse = {
+          jsonrpc: "2.0",
+          id: individualRequest.id,
+          error: {
+            code: -70000,
+            message: "Internal Proxy error",
+            data: error.message
+          }
+        };
+        batchResponses.push(errorResponse);
+      }
+    }
+    
+    console.log("📦 Batch request completed, returning", batchResponses.length, "responses");
+    res.json(batchResponses);
+  } else {
+    // Handle single request (existing logic)
+    try {
+      const response = await processSingleRequest(req);
+      res.json(response);
+    } catch (error) {
+      // Create proper error response object
+      const errorResponse = {
+        jsonrpc: "2.0",
+        id: req.body.id,
+        error: {
+          code: -70000,
+          message: "Internal Proxy error",
+          data: error.message
+        }
+      };
+      res.status(200).json(errorResponse);
+    }
+  }
+  
   console.log("-----------------------------------------------------------------------------------------");
 });
 
