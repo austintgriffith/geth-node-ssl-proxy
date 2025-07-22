@@ -114,7 +114,11 @@ function checkFallbackRateAndAlert() {
     fallbackTimestamps.length > fallbackRateAlertThreshold &&
     (now - lastFallbackAlertTime > 60 * 60 * 1000)
   ) {
-    sendTelegramAlert(`\n------------------------------------------\n🚨 More than ${fallbackRateAlertThreshold} fallback requests in the last hour`);
+    try {
+      sendTelegramAlert(`\n------------------------------------------\n🚨 More than ${fallbackRateAlertThreshold} fallback requests in the last hour`);
+    } catch (telegramError) {
+      console.error("❌ Error sending telegram alert:", telegramError.message);
+    }
     lastFallbackAlertTime = now;
   }
 }
@@ -133,7 +137,11 @@ function validateFallbackResponse(response, originalRequest) {
     throw new Error('Response is not valid JSON');
   } catch (error) {
     console.log('🚨 Invalid JSON from fallback provider:', response);
-    sendTelegramAlert(`🚨 INVALID JSON FROM FALLBACK\nRequest: ${JSON.stringify(originalRequest)}\nResponse: ${response}\nError: ${error.message}`);
+    try {
+      sendTelegramAlert(`🚨 INVALID JSON FROM FALLBACK\nRequest: ${JSON.stringify(originalRequest)}\nResponse: ${response}\nError: ${error.message}`);
+    } catch (telegramError) {
+      console.error("❌ Error sending telegram alert:", telegramError.message);
+    }
     return response; // Return original response even if invalid
   }
 }
@@ -350,7 +358,11 @@ async function processSingleRequest(req) {
       console.log(`❌ Request failed`);
       // Pass error code if available
       const errorCode = response && response.error && typeof response.error.code !== 'undefined' ? response.error.code : undefined;
-      sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`, errorCode);
+      try {
+        sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`, errorCode);
+      } catch (telegramError) {
+        console.error("❌ Error sending telegram alert:", telegramError.message);
+      }
       return response;
     }
   } catch (error) {
@@ -369,7 +381,11 @@ async function processSingleRequest(req) {
     
     logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType);
     // Pass error code if available
-    sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`, errorResponse.error.code);
+    try {
+      sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`, errorResponse.error.code);
+    } catch (telegramError) {
+      console.error("❌ Error sending telegram alert:", telegramError.message);
+    }
 
     return errorResponse;
   }
