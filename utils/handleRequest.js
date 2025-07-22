@@ -4,7 +4,7 @@ const fs = require("fs");
 
 require('dotenv').config();
 
-const { fallbackUrl, fallbackRequestTimeout, poolPort } = require('../config');
+const { fallbackRequestTimeout, poolPort } = require('../config');
 
 async function handleRequest(req, res, type) {
   if (type === 'fallback') {
@@ -48,7 +48,7 @@ async function makeRequest(body, headers, type) {
   try {
     let url;
     if (type === 'fallback') {
-      url = fallbackUrl;
+      url = process.env.FALLBACK_URL;
     } else if (type === 'pool') {
       url = `https://${process.env.HOST}:${poolPort}/requestPool`;
     }

@@ -1,5 +1,3 @@
-const fallbackUrl = "https://office.buidlguidl.com:48544";
-// const fallbackUrl = "https://eth-mainnet.g.alchemy.com/v2/4i6PpcyvSVr_vfoIqxSFJO797NJtjP5s";
 const proxyPortPublic = 48544;
 const webServerPort = 48545;
 const proxyPort = 3002;
@@ -16,7 +14,6 @@ const cacheRequestLogPath = "/home/ubuntu/shared/cacheRequests.log";
 const poolRequestLogPath = "/home/ubuntu/shared/poolRequests.log";      
 
 module.exports = {
-  fallbackUrl,
   proxyPortPublic,
   webServerPort,
   proxyPort,
