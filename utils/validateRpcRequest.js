@@ -3,7 +3,7 @@ function validateRpcRequest(req, res, next) {
   if (Array.isArray(req.body)) {
     if (req.body.length === 0) {
       console.log("‼️ Invalid Request: empty batch array");
-      return res.status(400).send({
+      return res.status(200).send({
         jsonrpc: "2.0",
         id: null,
         error: {
@@ -27,7 +27,7 @@ function validateRpcRequest(req, res, next) {
         console.log(`‼️ Invalid Request in batch item ${i}: ` + reason.join(", "));
         console.log("Request object:", request);
 
-        return res.status(400).send({
+        return res.status(200).send({
           jsonrpc: "2.0",
           id: id || null,
           error: {
@@ -56,7 +56,7 @@ function validateRpcRequest(req, res, next) {
     console.log("‼️ Invalid Request: " + reason.join(", "));
     console.log("Request object:", req.body);
 
-    return res.status(400).send({
+    return res.status(200).send({
       jsonrpc: "2.0",
       id: id || null,
       error: {
