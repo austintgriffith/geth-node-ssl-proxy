@@ -62,7 +62,7 @@ function validateRpcRequest(req, res, next) {
       error: {
         code: -32600,
         message: "Invalid Request",
-        data: "The JSON sent is not a valid Request object"
+        data: reason.join(", ")
       }
     });
   }
