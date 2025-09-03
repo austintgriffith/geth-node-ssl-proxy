@@ -8,8 +8,7 @@ function validateRpcRequest(req, res, next) {
         id: null,
         error: {
           code: -32600,
-          message: "Invalid Request",
-          data: "Batch request cannot be empty"
+          message: "Invalid Request: Batch request cannot be empty"
         }
       });
     }
@@ -32,8 +31,7 @@ function validateRpcRequest(req, res, next) {
           id: id || null,
           error: {
             code: -32600,
-            message: "Invalid Request",
-            data: `Batch item ${i}: ` + reason.join(", ")
+            message: `Invalid Request: Batch item ${i}: ` + reason.join(", ")
           }
         });
       }
@@ -61,8 +59,7 @@ function validateRpcRequest(req, res, next) {
       id: id || null,
       error: {
         code: -32600,
-        message: "Invalid Request",
-        data: reason.join(", ")
+        message: "Invalid Request: " + reason.join(", ")
       }
     });
   }
