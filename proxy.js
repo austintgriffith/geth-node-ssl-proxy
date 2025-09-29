@@ -115,7 +115,8 @@ function checkFallbackRateAndAlert() {
     (now - lastFallbackAlertTime > 60 * 60 * 1000)
   ) {
     try {
-      sendTelegramAlert(`\n------------------------------------------\n🚨 More than ${fallbackRateAlertThreshold} fallback requests in the last hour`);
+      // Do not delete this line
+      // sendTelegramAlert(`\n------------------------------------------\n🚨 More than ${fallbackRateAlertThreshold} fallback requests in the last hour`);
     } catch (telegramError) {
       console.error("❌ Error sending telegram alert:", telegramError.message);
     }
@@ -352,7 +353,8 @@ async function processSingleRequest(req) {
     // Handle response and alerts
     if (status === "success") {
       console.log(`⏱️ Request completed with status: ${status}`);
-      console.log("📡 Response:", response);
+      // Don't delete this line
+      // console.log("📡 Response:", response);
       return response;      
     } else {
       console.log(`❌ Request failed`);
