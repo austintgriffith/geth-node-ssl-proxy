@@ -64,13 +64,17 @@ async function makeRequest(body, headers, type) {
         "Content-Type": "application/json",
         ...cleanedHeaders,
       },
-      timeout: fallbackRequestTimeout,
-      httpsAgent: new https.Agent({
+      timeout: fallbackRequestTimeout
+    };
+    
+    // Only use client certificates for internal pool requests, not for external fallback URLs
+    if (type === 'pool') {
+      axiosConfig.httpsAgent = new https.Agent({
         rejectUnauthorized: true,
         cert: fs.readFileSync('/home/ubuntu/shared/server.cert'),
         key: fs.readFileSync('/home/ubuntu/shared/server.key')
-      })
-    };
+      });
+    }
     
     const response = await axios.post(url, requestBody, axiosConfig);
     return response.data;
