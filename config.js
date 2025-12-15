@@ -5,7 +5,7 @@ const poolPort = 3003;
 const fallbackRequestTimeout = 5000; // 5 seconds
 const cacheMaxRetries = 1000000;
 const cacheRetryDelay = 5000; // 5 seconds
-const blockNumberCacheTimeout = 22000; // 22 second timeout
+const blockNumberCacheTimeout = 25000; // 25 second timeout
 const cacheMethodCleanupTimeout = 1000 * 60 * 60 * 2; // 2 hours
 const fallbackRateAlertThreshold = 9; // Fallback requests per hour to trigger telegram alert
 
