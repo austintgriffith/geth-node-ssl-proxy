@@ -68,7 +68,7 @@ function connectWebSocket() {
       
       // Emit event when cached methods change
       cacheEvents.emit('cachedMethodsUpdated', Array.from(cachedMethods));
-      console.log(`💾 Updated cached method: ${method} | Params: ${JSON.stringify(params)}`);
+      console.log(`💾 Updated cached method: ${method}`);
 
       // Please dont delete this, it's useful for debugging
       // console.log('\n=== Cached RPC Methods ===\n');

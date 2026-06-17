@@ -154,7 +154,8 @@ app.get("/watchdog", (req, res) => {
 
 // Extract single request processing logic into a reusable function
 async function processSingleRequest(req) {
-  console.log("📡 RPC REQUEST", req.body);
+  const { jsonrpc, id, method } = req.body;
+  console.log("📡 RPC REQUEST", { jsonrpc, id, method });
 
   // Create a deep copy of just the necessary request properties
   // Used for fallback requests b/c don't know if officebox is on the same block as pool nodes
@@ -183,7 +184,7 @@ async function processSingleRequest(req) {
     const newBodyString = JSON.stringify(req.body);
     req.headers['content-length'] = Buffer.byteLength(newBodyString);
 
-    console.log("📡 New Req.body:", req.body);
+    console.log("📡 New Req.body:", { jsonrpc: req.body.jsonrpc, id: req.body.id, method: req.body.method });
 
     // Check if method is cached and parameters match
     const cacheKey = `${req.body.method}:${JSON.stringify(transformedParams)}`;

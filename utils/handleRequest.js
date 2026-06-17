@@ -4,7 +4,7 @@ const fs = require("fs");
 
 require('dotenv').config();
 
-const { fallbackRequestTimeout, poolPort } = require('../config');
+const { fallbackRequestTimeout, poolRequestTimeout, poolPort } = require('../config');
 
 async function handleRequest(req, res, type) {
   if (type === 'fallback') {
@@ -59,12 +59,13 @@ async function makeRequest(body, headers, type) {
     
     const requestBody = typeof body === 'string' ? JSON.parse(body) : body;
     
+    const timeout = type === 'pool' ? poolRequestTimeout : fallbackRequestTimeout;
     const axiosConfig = {
       headers: {
         "Content-Type": "application/json",
         ...cleanedHeaders,
       },
-      timeout: fallbackRequestTimeout,
+      timeout,
       httpsAgent: new https.Agent({
         rejectUnauthorized: true,
         cert: fs.readFileSync('/home/ubuntu/shared/server.cert'),
@@ -81,10 +82,11 @@ async function makeRequest(body, headers, type) {
     }
     
     if (error.code === 'ECONNABORTED') {
+      const timeoutSeconds = type === 'pool' ? poolRequestTimeout / 1000 : fallbackRequestTimeout / 1000;
       throw {
         error: {
           code: -69008,
-          message: `Fallback Request timed out after ${fallbackRequestTimeout/1000} seconds`
+          message: `Request timed out after ${timeoutSeconds} seconds`
         }
       };
     }

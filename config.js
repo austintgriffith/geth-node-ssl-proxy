@@ -2,7 +2,8 @@ const proxyPortPublic = 48544;
 const webServerPort = 48545;
 const proxyPort = 3002;
 const poolPort = 3003;
-const fallbackRequestTimeout = 5000; // 5 seconds
+const fallbackRequestTimeout = 10000; // 10 seconds
+const poolRequestTimeout = 15000; // 15 seconds - must be >= longest pool method timeout (e.g. eth_getLogs 10s)
 const cacheMaxRetries = 1000000;
 const cacheRetryDelay = 5000; // 5 seconds
 const blockNumberCacheTimeout = 25000; // 25 second timeout
@@ -19,6 +20,7 @@ module.exports = {
   proxyPort,
   poolPort,
   fallbackRequestTimeout,
+  poolRequestTimeout,
   blockNumberCacheTimeout,
   cacheMaxRetries,
   cacheRetryDelay,
