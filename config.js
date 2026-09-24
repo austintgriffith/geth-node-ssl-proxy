@@ -4,13 +4,13 @@ const proxyPort = 3002;
 const poolPort = 3003;
 const fallbackRequestTimeout = 10000; // 10 seconds
 const poolRequestTimeout = 15000; // 15 seconds - must be >= longest pool method timeout (e.g. eth_getLogs 10s)
-// Per-method overrides of poolRequestTimeout. Heavy methods stay at 15s until the pool's
-// heavy-method timeout drops to 5s with no retry (getLogs plan Phase 3); then lower to 8000.
+// Per-method overrides of poolRequestTimeout. Heavy methods: the pool gives up after 5s
+// (3s for filter creation/changes) with no retry, so 8s leaves room for transfer.
 const poolRequestTimeoutByMethod = {
-  eth_getLogs: 15000,
-  eth_getFilterLogs: 15000,
-  eth_newFilter: 15000,
-  eth_getFilterChanges: 15000,
+  eth_getLogs: 8000,
+  eth_getFilterLogs: 8000,
+  eth_newFilter: 8000,
+  eth_getFilterChanges: 8000,
 };
 const maxBatchLength = 50; // Larger batches are rejected with -32600
 // Never sent to the fallback when the pool fails; the pool's error goes back to the caller

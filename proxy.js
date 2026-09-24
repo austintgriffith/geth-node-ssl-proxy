@@ -10,7 +10,7 @@ const internalApp = express();
 require("dotenv").config();
 
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
-const { handleRequest } = require('./utils/handleRequest');
+const { handleRequest, fetchGetLogsStatus } = require('./utils/handleRequest');
 const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('./utils/handleCachedRequest');
 const { logRequest } = require('./utils/logRequest');
 const { sendTelegramAlert } = require('./utils/telegramUtils');
@@ -146,6 +146,16 @@ function validateFallbackResponse(response, originalRequest) {
     return response; // Return original response even if invalid
   }
 }
+
+// getLogs readiness for the edge, which can only reach this port
+app.get("/getlogsStatus", async (req, res) => {
+  try {
+    res.json(await fetchGetLogsStatus());
+  } catch (error) {
+    console.error("❌ /getlogsStatus: pool unreachable:", error.message);
+    res.status(502).json({ error: "pool unreachable" });
+  }
+});
 
 // Returns why a failed pool request must not go to the fallback, or null if it may
 function noFallbackReason(method, poolResult) {

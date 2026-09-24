@@ -38,12 +38,14 @@ async function handleRequest(req, res, type) {
       data: errorDetails.data
     });
     
+    // Keep a specific code from makeRequest (e.g. -69008 timeout); -70000 for everything else
+    const hasOwnCode = typeof errorDetails.code === 'number' && errorDetails.code !== -70000;
     const errorResponse = {
         jsonrpc: "2.0",
         id: req.body.id,
         error: {
-            code: -70000,
-            message: "Internal Proxy service error",
+            code: hasOwnCode ? errorDetails.code : -70000,
+            message: hasOwnCode ? errorDetails.message : "Internal Proxy service error",
             data: errorDetails.message || error.message
         }
     };
@@ -108,4 +110,13 @@ async function makeRequest(body, headers, type) {
   }
 }
 
-module.exports = { handleRequest };
+// Pool's getLogs readiness ({ readyNodes, receiptFloor, inFlight }), for the edge
+async function fetchGetLogsStatus() {
+  const response = await axios.get(`https://${process.env.HOST}:${poolPort}/getlogsStatus`, {
+    timeout: 5000,
+    httpsAgent
+  });
+  return response.data;
+}
+
+module.exports = { handleRequest, fetchGetLogsStatus };
