@@ -4,7 +4,14 @@ const fs = require("fs");
 
 require('dotenv').config();
 
-const { fallbackRequestTimeout, poolRequestTimeout, poolPort } = require('../config');
+const { fallbackRequestTimeout, poolRequestTimeout, poolRequestTimeoutByMethod, poolPort, forwardedHeaders } = require('../config');
+
+// Read the cert/key once, not per request
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: true,
+  cert: fs.readFileSync('/home/ubuntu/shared/server.cert'),
+  key: fs.readFileSync('/home/ubuntu/shared/server.key')
+});
 
 async function handleRequest(req, res, type) {
   if (type === 'fallback') {
@@ -45,6 +52,7 @@ async function handleRequest(req, res, type) {
 }
 
 async function makeRequest(body, headers, type) {
+  let timeout = type === 'pool' ? poolRequestTimeout : fallbackRequestTimeout;
   try {
     let url;
     if (type === 'fallback') {
@@ -53,24 +61,24 @@ async function makeRequest(body, headers, type) {
       url = `https://${process.env.HOST}:${poolPort}/requestPool`;
     }
 
-    // Create a new headers object without the problematic host header
-    const cleanedHeaders = { ...headers };
-    delete cleanedHeaders.host;
+    // Forward only allowlisted caller headers; axios sets host, content-length etc. itself
+    const cleanedHeaders = {};
+    for (const name of forwardedHeaders) {
+      if (headers[name] !== undefined) cleanedHeaders[name] = headers[name];
+    }
     
     const requestBody = typeof body === 'string' ? JSON.parse(body) : body;
     
-    const timeout = type === 'pool' ? poolRequestTimeout : fallbackRequestTimeout;
+    if (type === 'pool' && poolRequestTimeoutByMethod[requestBody.method] !== undefined) {
+      timeout = poolRequestTimeoutByMethod[requestBody.method];
+    }
     const axiosConfig = {
       headers: {
-        "Content-Type": "application/json",
         ...cleanedHeaders,
+        "Content-Type": "application/json",
       },
       timeout,
-      httpsAgent: new https.Agent({
-        rejectUnauthorized: true,
-        cert: fs.readFileSync('/home/ubuntu/shared/server.cert'),
-        key: fs.readFileSync('/home/ubuntu/shared/server.key')
-      })
+      httpsAgent
     };
     
     const response = await axios.post(url, requestBody, axiosConfig);
@@ -82,7 +90,7 @@ async function makeRequest(body, headers, type) {
     }
     
     if (error.code === 'ECONNABORTED') {
-      const timeoutSeconds = type === 'pool' ? poolRequestTimeout / 1000 : fallbackRequestTimeout / 1000;
+      const timeoutSeconds = timeout / 1000;
       throw {
         error: {
           code: -69008,

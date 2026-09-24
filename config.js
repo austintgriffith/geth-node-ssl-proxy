@@ -4,6 +4,20 @@ const proxyPort = 3002;
 const poolPort = 3003;
 const fallbackRequestTimeout = 10000; // 10 seconds
 const poolRequestTimeout = 15000; // 15 seconds - must be >= longest pool method timeout (e.g. eth_getLogs 10s)
+// Per-method overrides of poolRequestTimeout. Heavy methods stay at 15s until the pool's
+// heavy-method timeout drops to 5s with no retry (getLogs plan Phase 3); then lower to 8000.
+const poolRequestTimeoutByMethod = {
+  eth_getLogs: 15000,
+  eth_getFilterLogs: 15000,
+  eth_newFilter: 15000,
+  eth_getFilterChanges: 15000,
+};
+const maxBatchLength = 50; // Larger batches are rejected with -32600
+// Never sent to the fallback when the pool fails; the pool's error goes back to the caller
+const methodsNeverFallback = ['eth_getLogs', 'eth_newFilter', 'eth_getFilterLogs', 'eth_getFilterChanges'];
+// Caller headers forwarded to the pool and fallback (lowercase). Everything else is dropped:
+// forwarding transfer-encoding/content-length breaks the request, and keys must not reach the fallback.
+const forwardedHeaders = ['user-agent', 'origin'];
 const cacheMaxRetries = 1000000;
 const cacheRetryDelay = 5000; // 5 seconds
 const blockNumberCacheTimeout = 25000; // 25 second timeout
@@ -21,6 +35,10 @@ module.exports = {
   poolPort,
   fallbackRequestTimeout,
   poolRequestTimeout,
+  poolRequestTimeoutByMethod,
+  maxBatchLength,
+  methodsNeverFallback,
+  forwardedHeaders,
   blockNumberCacheTimeout,
   cacheMaxRetries,
   cacheRetryDelay,

@@ -15,7 +15,7 @@ const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('.
 const { logRequest } = require('./utils/logRequest');
 const { sendTelegramAlert } = require('./utils/telegramUtils');
 
-const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold } = require('./config');
+const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback } = require('./config');
 const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
 
 // Initialize with empty array, will be updated by cache service
@@ -147,6 +147,18 @@ function validateFallbackResponse(response, originalRequest) {
   }
 }
 
+// Returns why a failed pool request must not go to the fallback, or null if it may
+function noFallbackReason(method, poolResult) {
+  if (methodsNeverFallback.includes(method)) {
+    return `${method} never uses fallback`;
+  }
+  const errorCode = poolResult.error?.error?.code;
+  if (errorCode !== undefined && ignoredErrorCodes.includes(errorCode)) {
+    return `Ignored Error code: ${errorCode}`;
+  }
+  return null;
+}
+
 // Watchdog endpoint for health checks
 app.get("/watchdog", (req, res) => {
   res.json({ ok: true });
@@ -179,10 +191,6 @@ async function processSingleRequest(req) {
     req.body.params = transformedParams;
     req.body.jsonrpc = "2.0"; // Ensure JSON-RPC version is set
     req.body.id = req.body.id; // Ensure ID is set
-
-    // Update content-length header to match new body length
-    const newBodyString = JSON.stringify(req.body);
-    req.headers['content-length'] = Buffer.byteLength(newBodyString);
 
     console.log("📡 New Req.body:", { jsonrpc: req.body.jsonrpc, id: req.body.id, method: req.body.method });
 
@@ -217,16 +225,11 @@ async function processSingleRequest(req) {
             requestType = 'pool';
             response = poolResult.data;
             status = "success";
-          } else if (
-            poolResult.error &&
-            poolResult.error.error &&
-            ignoredErrorCodes.includes(poolResult.error.error.code)
-          ) {
-            // Do NOT try fallback for execution reverted
+          } else if (noFallbackReason(req.body.method, poolResult)) {
+            // Do NOT try fallback for execution reverted etc. or for heavy methods
             response = poolResult.error;
             status = "error";
-            const errorCode = poolResult.error.error.code;
-            console.log(`⛔ Ignored Error code: ${errorCode}, not retrying with fallback.`);
+            console.log(`⛔ ${noFallbackReason(req.body.method, poolResult)}, not retrying with fallback.`);
           } else {
             // Pool failed, try fallback
             console.log("🔄 Pool request failed, trying fallback...");
@@ -269,16 +272,11 @@ async function processSingleRequest(req) {
           requestType = 'pool';
           response = poolResult.data;
           status = "success";
-        } else if (
-          poolResult.error &&
-          poolResult.error.error &&
-          ignoredErrorCodes.includes(poolResult.error.error.code)
-        ) {
-          // Do NOT try fallback for execution reverted
+        } else if (noFallbackReason(req.body.method, poolResult)) {
+          // Do NOT try fallback for execution reverted etc. or for heavy methods
           response = poolResult.error;
           status = "error";
-          const errorCode = poolResult.error.error.code;
-          console.log(`⛔ Ignored Error code: ${errorCode}, not retrying with fallback.`);
+          console.log(`⛔ ${noFallbackReason(req.body.method, poolResult)}, not retrying with fallback.`);
         } else {
           // Pool failed, try fallback
           console.log("🔄 Pool request failed, trying fallback...");
@@ -316,16 +314,11 @@ async function processSingleRequest(req) {
       if (poolResult.success) {
         response = poolResult.data;
         status = "success";
-      } else if (
-        poolResult.error &&
-        poolResult.error.error &&
-        ignoredErrorCodes.includes(poolResult.error.error.code)
-      ) {
-        // Do NOT try fallback for execution reverted
+      } else if (noFallbackReason(req.body.method, poolResult)) {
+        // Do NOT try fallback for execution reverted etc. or for heavy methods
         response = poolResult.error;
         status = "error";
-        const errorCode = poolResult.error.error.code;
-        console.log(`⛔ Ignored Error code: ${errorCode}, not retrying with fallback.`);
+        console.log(`⛔ ${noFallbackReason(req.body.method, poolResult)}, not retrying with fallback.`);
       } else {
         // Pool failed, try fallback
         console.log("🔄 Pool request failed, trying fallback...");
@@ -362,7 +355,7 @@ async function processSingleRequest(req) {
       // Pass error code if available
       const errorCode = response && response.error && typeof response.error.code !== 'undefined' ? response.error.code : undefined;
       try {
-        sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`, errorCode);
+        sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(response, null, 2)}`, errorCode, req.body.method);
       } catch (telegramError) {
         console.error("❌ Error sending telegram alert:", telegramError.message);
       }
@@ -385,7 +378,7 @@ async function processSingleRequest(req) {
     logRequest(req, epochTime, utcTimestamp, duration, errorResponse, requestType);
     // Pass error code if available
     try {
-      sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`, errorResponse.error.code);
+      sendTelegramAlert(`\n------------------------------------------\n🚨 RPC Request Failed\n\nRequest:\n${JSON.stringify(req.body, null, 2)}\n\nResponse:\n${JSON.stringify(errorResponse, null, 2)}`, errorResponse.error.code, req.body.method);
     } catch (telegramError) {
       console.error("❌ Error sending telegram alert:", telegramError.message);
     }

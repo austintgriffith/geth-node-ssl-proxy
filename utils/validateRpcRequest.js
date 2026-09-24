@@ -1,3 +1,5 @@
+const { maxBatchLength } = require('../config');
+
 function validateRpcRequest(req, res, next) {
   // Handle batch requests (arrays)
   if (Array.isArray(req.body)) {
@@ -9,6 +11,18 @@ function validateRpcRequest(req, res, next) {
         error: {
           code: -32600,
           message: "Invalid Request: Batch request cannot be empty"
+        }
+      });
+    }
+
+    if (req.body.length > maxBatchLength) {
+      console.log(`‼️ Invalid Request: batch of ${req.body.length} exceeds max ${maxBatchLength}`);
+      return res.status(200).send({
+        jsonrpc: "2.0",
+        id: null,
+        error: {
+          code: -32600,
+          message: `Batch too large (max ${maxBatchLength})`
         }
       });
     }

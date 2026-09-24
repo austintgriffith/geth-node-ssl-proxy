@@ -1,5 +1,6 @@
 const TelegramBot = require("node-telegram-bot-api");
 const { ignoredErrorCodes } = require('../../shared/ignoredErrorCodes');
+const { methodsNeverFallback } = require('../config');
 
 require("dotenv").config();
 
@@ -32,7 +33,7 @@ try {
   console.warn("⚠️ Telegram alerts will be disabled due to initialization error.");
 }
 
-function sendTelegramAlert(message, errorCode) {
+function sendTelegramAlert(message, errorCode, method) {
   try {
     // Check if telegram is properly configured
     if (!isConfigured || !telegramBot || TELEGRAM_CHAT_IDS.length === 0) {
@@ -43,6 +44,12 @@ function sendTelegramAlert(message, errorCode) {
     // Check if error code should be ignored
     if (typeof errorCode !== 'undefined' && ignoredErrorCodes.includes(errorCode)) {
       console.log(`🚫 Not sending Telegram alert for ignored error code: ${errorCode}`);
+      return;
+    }
+
+    // Heavy methods fail by design (capacity, range, timeouts); the edge reports key-level problems
+    if (method && methodsNeverFallback.includes(method)) {
+      console.log(`🚫 Not sending Telegram alert for ${method}`);
       return;
     }
 
