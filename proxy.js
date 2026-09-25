@@ -47,6 +47,9 @@ app.use(cors({
 
 // Function to transform latest to block number if conditions are met
 function transformLatestToBlockNumber(method, params, cacheMap) {
+  // By-name (object) params are passed through untouched; the node validates them
+  if (!Array.isArray(params)) return params;
+
   // Check if params contains "latest"
   const latestIndex = params.findIndex(param => param === "latest");
   if (latestIndex === -1) return params;

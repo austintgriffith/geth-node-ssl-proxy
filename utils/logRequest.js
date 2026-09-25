@@ -45,6 +45,10 @@ function logRequest(req, startTime, utcTimestamp, duration, status, type) {
     logPath = cacheRequestLogPath;
   } else if (type === 'pool') {
     logPath = poolRequestLogPath;
+  } else {
+    // Unknown type (e.g. an error before any attempt was made): never throw from the logger
+    console.error(`logRequest: no log file for type "${type}":`, logEntry.trim());
+    return;
   }
   
   fs.appendFile(logPath, logEntry, (err) => {
