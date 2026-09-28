@@ -17,7 +17,7 @@ const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('.
 const { logRequest } = require('./utils/logRequest');
 const { sendTelegramAlert } = require('./utils/telegramUtils');
 
-const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback } = require('./config');
+const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback, methodsKeepLatest } = require('./config');
 const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
 
 // Initialize with empty array, will be updated by cache service
@@ -49,6 +49,8 @@ app.use(cors({
 function transformLatestToBlockNumber(method, params, cacheMap) {
   // By-name (object) params are passed through untouched; the node validates them
   if (!Array.isArray(params)) return params;
+  // Head-only methods: the node resolves "latest" itself
+  if (methodsKeepLatest.includes(method)) return params;
 
   // Check if params contains "latest"
   const latestIndex = params.findIndex(param => param === "latest");

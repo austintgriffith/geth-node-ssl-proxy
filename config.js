@@ -15,6 +15,10 @@ const poolRequestTimeoutByMethod = {
 const maxBatchLength = 50; // Larger batches are rejected with -32600
 // Never sent to the fallback when the pool fails; the pool's error goes back to the caller
 const methodsNeverFallback = ['eth_getLogs', 'eth_newFilter', 'eth_getFilterLogs', 'eth_getFilterChanges'];
+// "latest" is passed through for these instead of being replaced with the cached head number:
+// reth serves them only at the node's own head (--rpc.eth-proof-window 0), and the cached number
+// can be a block behind (measured: 3 of 40 eth_getProof "latest" failed). Never cached either way.
+const methodsKeepLatest = ['eth_getProof', 'eth_getAccount'];
 // Caller headers forwarded to the pool and fallback (lowercase). Everything else is dropped:
 // forwarding transfer-encoding/content-length breaks the request, and keys must not reach the fallback.
 const forwardedHeaders = ['user-agent', 'origin'];
@@ -38,6 +42,7 @@ module.exports = {
   poolRequestTimeoutByMethod,
   maxBatchLength,
   methodsNeverFallback,
+  methodsKeepLatest,
   forwardedHeaders,
   blockNumberCacheTimeout,
   cacheMaxRetries,
