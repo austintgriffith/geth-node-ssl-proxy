@@ -17,7 +17,7 @@ const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('.
 const { logRequest } = require('./utils/logRequest');
 const { sendTelegramAlert } = require('./utils/telegramUtils');
 
-const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback, methodsKeepLatest } = require('./config');
+const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback, methodsKeepLatest, maxRequestBodySize } = require('./config');
 const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
 const { callerErrorReason } = require('./utils/fallbackPolicy');
 
@@ -39,7 +39,17 @@ app.use(compression({
   level: zlib.constants.Z_BEST_SPEED,
   brotli: { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 1 } },
 }));
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: maxRequestBodySize }));
+// Body-parser failures answer as JSON-RPC, not Express's HTML error page
+app.use((err, req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({ jsonrpc: "2.0", id: null, error: { code: -32600, message: `Request body too large (max ${maxRequestBodySize})` } });
+  }
+  if (err?.type === 'entity.parse.failed') {
+    return res.status(400).json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } });
+  }
+  next(err);
+});
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],

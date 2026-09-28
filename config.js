@@ -13,6 +13,10 @@ const poolRequestTimeoutByMethod = {
   eth_getFilterChanges: 8000,
 };
 const maxBatchLength = 50; // Larger batches are rejected with -32600
+// Largest JSON body accepted. body-parser's default (100 KB) refused blob transactions
+// (~130 KB hex per blob, up to ~2.4 MB) and large eth_call data with an HTML 413 (request
+// audit, 2026-09-28). Alchemy accepts ~2.5 MB; the pool and nodes handled 1 MB fine.
+const maxRequestBodySize = '4mb';
 // Never sent to the fallback when the pool fails; the pool's error goes back to the caller
 const methodsNeverFallback = ['eth_getLogs', 'eth_newFilter', 'eth_getFilterLogs', 'eth_getFilterChanges'];
 // "latest" is passed through for these instead of being replaced with the cached head number:
@@ -41,6 +45,7 @@ module.exports = {
   poolRequestTimeout,
   poolRequestTimeoutByMethod,
   maxBatchLength,
+  maxRequestBodySize,
   methodsNeverFallback,
   methodsKeepLatest,
   forwardedHeaders,
