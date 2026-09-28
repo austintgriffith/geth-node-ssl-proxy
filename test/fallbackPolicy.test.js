@@ -37,3 +37,24 @@ ours({ code: -32001, message: `block not found: 0x${(HEAD + 1000).toString(16)}`
 ours({ code: -32001, message: 'block not found' });
 
 console.log('fallbackPolicy: all passed');
+
+// geth wording (measured, geth v1.17.4, 2026-09-28)
+const { requestedBlock } = require('../utils/fallbackPolicy');
+const hx = (n) => '0x' + n.toString(16);
+// future block: geth says "header not found" with no number; the request names the block
+assert.ok(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD, { params: ['0xabc', hx(HEAD + 1000)] }), 'geth future block is a caller error');
+assert.ok(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD, { params: [{ to: '0x1' }, { blockNumber: hx(HEAD + 500) }] }), 'EIP-1898 future block');
+// near our head, or no block in the request: may be our nodes lagging → fall back
+ours({ code: -32000, message: 'header not found' });
+assert.strictEqual(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD, { params: ['0xabc', hx(HEAD + 2)] }), null);
+assert.strictEqual(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD, { params: [{ to: '0x1', value: '0xde0b6b3a7640000' }, 'latest'] }), null, 'a tx value is not a block');
+// geth missing state → our limitation, may fall back
+ours({ code: -32000, message: 'historical state 1dddf24a047383a8d1a9c7474a925f4c125c66f9ae962815c1bb3 is not available' });
+ours({ code: -32000, message: 'missing trie node 1234 (path )' });
+// geth caller mistakes stay final
+caller({ code: -32000, message: 'failed with 16777216 gas: insufficient funds for gas * price + value: address 0x11 have 0 want 1' });
+caller({ code: -32000, message: 'rlp: value size exceeds available input length' });
+caller({ code: -32601, message: 'the method eth_getAccount does not exist/is not available' });
+assert.strictEqual(requestedBlock(['0x1', '0x2a', { blockNumber: '0x64' }]), 100);
+assert.strictEqual(requestedBlock({ address: '0x1' }), null);
+console.log('fallbackPolicy (geth wording): all passed');

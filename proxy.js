@@ -184,7 +184,7 @@ app.get("/getlogsStatus", async (req, res) => {
 });
 
 // Returns why a failed pool request must not go to the fallback, or null if it may
-function noFallbackReason(method, poolResult) {
+function noFallbackReason(method, poolResult, request) {
   if (methodsNeverFallback.includes(method)) {
     return `${method} never uses fallback`;
   }
@@ -194,7 +194,7 @@ function noFallbackReason(method, poolResult) {
   }
   // A caller's mistake fails on the fallback too (utils/fallbackPolicy.js)
   const head = getCacheMap().get(`eth_blockNumber:${JSON.stringify([])}`)?.value;
-  const reason = callerErrorReason(poolResult.error?.error, head ? parseInt(head, 16) : null);
+  const reason = callerErrorReason(poolResult.error?.error, head ? parseInt(head, 16) : null, request);
   return reason ? `Caller error: ${reason}` : null;
 }
 
@@ -264,11 +264,11 @@ async function processSingleRequest(req) {
             requestType = 'pool';
             response = poolResult.data;
             status = "success";
-          } else if (noFallbackReason(req.body.method, poolResult)) {
+          } else if (noFallbackReason(req.body.method, poolResult, req.body)) {
             // Do NOT try fallback for execution reverted etc. or for heavy methods
             response = poolResult.error;
             status = "error";
-            console.log(`⛔ ${noFallbackReason(req.body.method, poolResult)}, not retrying with fallback.`);
+            console.log(`⛔ ${noFallbackReason(req.body.method, poolResult, req.body)}, not retrying with fallback.`);
           } else {
             // Pool failed, try fallback
             console.log("🔄 Pool request failed, trying fallback...");
@@ -311,11 +311,11 @@ async function processSingleRequest(req) {
           requestType = 'pool';
           response = poolResult.data;
           status = "success";
-        } else if (noFallbackReason(req.body.method, poolResult)) {
+        } else if (noFallbackReason(req.body.method, poolResult, req.body)) {
           // Do NOT try fallback for execution reverted etc. or for heavy methods
           response = poolResult.error;
           status = "error";
-          console.log(`⛔ ${noFallbackReason(req.body.method, poolResult)}, not retrying with fallback.`);
+          console.log(`⛔ ${noFallbackReason(req.body.method, poolResult, req.body)}, not retrying with fallback.`);
         } else {
           // Pool failed, try fallback
           console.log("🔄 Pool request failed, trying fallback...");
@@ -353,11 +353,11 @@ async function processSingleRequest(req) {
       if (poolResult.success) {
         response = poolResult.data;
         status = "success";
-      } else if (noFallbackReason(req.body.method, poolResult)) {
+      } else if (noFallbackReason(req.body.method, poolResult, req.body)) {
         // Do NOT try fallback for execution reverted etc. or for heavy methods
         response = poolResult.error;
         status = "error";
-        console.log(`⛔ ${noFallbackReason(req.body.method, poolResult)}, not retrying with fallback.`);
+        console.log(`⛔ ${noFallbackReason(req.body.method, poolResult, req.body)}, not retrying with fallback.`);
       } else {
         // Pool failed, try fallback
         console.log("🔄 Pool request failed, trying fallback...");
@@ -394,7 +394,7 @@ async function processSingleRequest(req) {
       // Alert only for our failures. A caller's mistake (ignored codes, heavy methods, node
       // errors that aren't about our infrastructure: utils/fallbackPolicy.js) is the answer,
       // not an incident; alerting on it flooded Telegram once those stopped falling back.
-      const notOurFailure = noFallbackReason(req.body.method, { error: response });
+      const notOurFailure = noFallbackReason(req.body.method, { error: response }, req.body);
       if (notOurFailure) {
         console.log(`🔕 No alert: ${notOurFailure}`);
         return response;
