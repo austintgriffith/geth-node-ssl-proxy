@@ -19,6 +19,7 @@ const { sendTelegramAlert } = require('./utils/telegramUtils');
 
 const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback, methodsKeepLatest } = require('./config');
 const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
+const { callerErrorReason } = require('./utils/fallbackPolicy');
 
 // Initialize with empty array, will be updated by cache service
 let cachedMethods = [];
@@ -181,7 +182,10 @@ function noFallbackReason(method, poolResult) {
   if (errorCode !== undefined && ignoredErrorCodes.includes(errorCode)) {
     return `Ignored Error code: ${errorCode}`;
   }
-  return null;
+  // A caller's mistake fails on the fallback too (utils/fallbackPolicy.js)
+  const head = getCacheMap().get(`eth_blockNumber:${JSON.stringify([])}`)?.value;
+  const reason = callerErrorReason(poolResult.error?.error, head ? parseInt(head, 16) : null);
+  return reason ? `Caller error: ${reason}` : null;
 }
 
 // Watchdog endpoint for health checks
