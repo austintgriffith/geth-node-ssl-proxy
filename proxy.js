@@ -391,6 +391,14 @@ async function processSingleRequest(req) {
       return response;      
     } else {
       console.log(`❌ Request failed`);
+      // Alert only for our failures. A caller's mistake (ignored codes, heavy methods, node
+      // errors that aren't about our infrastructure: utils/fallbackPolicy.js) is the answer,
+      // not an incident; alerting on it flooded Telegram once those stopped falling back.
+      const notOurFailure = noFallbackReason(req.body.method, { error: response });
+      if (notOurFailure) {
+        console.log(`🔕 No alert: ${notOurFailure}`);
+        return response;
+      }
       // Pass error code if available
       const errorCode = response && response.error && typeof response.error.code !== 'undefined' ? response.error.code : undefined;
       try {
