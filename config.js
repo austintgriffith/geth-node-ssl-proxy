@@ -1,3 +1,4 @@
+require('dotenv').config(); // EDGE_IPS below, wherever config is loaded first
 const proxyPortPublic = 48544;
 const webServerPort = 48545;
 const proxyPort = 3002;
@@ -23,6 +24,10 @@ const methodsNeverFallback = ['eth_getLogs', 'eth_newFilter', 'eth_getFilterLogs
 // reth serves them only at the node's own head (--rpc.eth-proof-window 0), and the cached number
 // can be a block behind (measured: 3 of 40 eth_getProof "latest" failed). Never cached either way.
 const methodsKeepLatest = ['eth_getProof', 'eth_getAccount'];
+// Edge proxy address(es) (comma-separated EDGE_IPS in .env). Only requests from these may set the
+// caller's IP for the request logs, via clientIpHeader; see utils/requestLogFormat.js
+const edgeIps = (process.env.EDGE_IPS || '').split(',').map((s) => s.trim()).filter(Boolean);
+const clientIpHeader = 'x-client-ip';
 // Caller headers forwarded to the pool and fallback (lowercase). Everything else is dropped:
 // forwarding transfer-encoding/content-length breaks the request, and keys must not reach the fallback.
 const forwardedHeaders = ['user-agent', 'origin'];
@@ -48,6 +53,8 @@ module.exports = {
   maxRequestBodySize,
   methodsNeverFallback,
   methodsKeepLatest,
+  edgeIps,
+  clientIpHeader,
   forwardedHeaders,
   blockNumberCacheTimeout,
   cacheMaxRetries,

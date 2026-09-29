@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { fallbackRequestLogPath, cacheRequestLogPath, poolRequestLogPath } = require('../config');
+const { formatLogLine, clientIp } = require('./requestLogFormat');
 
 function logRequest(req, startTime, utcTimestamp, duration, status, type) {
   const { method, params } = req.body;
@@ -25,18 +26,27 @@ function logRequest(req, startTime, utcTimestamp, duration, status, type) {
     cleanStatus = status ? status.toString().replace(/[\r\n\s]+/g, ' ').trim() : 'unknown';
   }
 
-  let logEntry = `${utcTimestamp}|${startTime}|${reqHost}|${method}|`;
-  
+  let paramsText = '';
   if (params && Array.isArray(params)) {
-    logEntry += params.map(param => {
+    paramsText = params.map(param => {
       if (typeof param === 'object' && param !== null) {
         return JSON.stringify(param);
       }
       return param;
     }).join(',');
   }
-  
-  logEntry += `|${duration}|${cleanStatus}\n`;
+
+  // v2 line: origin, then the caller's IP (utils/requestLogFormat.js)
+  const logEntry = formatLogLine({
+    timestamp: utcTimestamp,
+    epoch: startTime,
+    origin: reqHost,
+    ip: clientIp(req),
+    method,
+    params: paramsText,
+    elapsed: duration,
+    status: cleanStatus,
+  });
 
   let logPath;
   if (type === 'fallback') {
