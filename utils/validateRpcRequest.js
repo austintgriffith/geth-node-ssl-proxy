@@ -31,11 +31,14 @@ function validateRpcRequest(req, res, next) {
     for (let i = 0; i < req.body.length; i++) {
       const request = req.body[i];
       const { jsonrpc, method, id } = request;
-      if (!jsonrpc || jsonrpc !== "2.0" || !method || id === undefined) {
+      // method must be a non-empty string: the cache key, the pool's routing table and the logs
+      // all use it as a name (independent audit HB4: ["eth_getLogs"] passed as a method)
+      if (!jsonrpc || jsonrpc !== "2.0" || typeof method !== 'string' || method === '' || id === undefined) {
         let reason = [];
         if (!jsonrpc) reason.push('jsonrpc missing');
         else if (jsonrpc !== "2.0") reason.push('jsonrpc must be "2.0"');
         if (!method) reason.push('method missing');
+        else if (typeof method !== 'string') reason.push('method must be a string');
         if (id === undefined) reason.push('id missing');
         console.log(`‼️ Invalid Request in batch item ${i}: ` + reason.join(", "));
         console.log("Request object:", request);
@@ -59,11 +62,12 @@ function validateRpcRequest(req, res, next) {
 
   // Handle single requests (existing logic)
   const { jsonrpc, method, id } = req.body;
-  if (!jsonrpc || jsonrpc !== "2.0" || !method || id === undefined) {
+  if (!jsonrpc || jsonrpc !== "2.0" || typeof method !== 'string' || method === '' || id === undefined) {
     let reason = [];
     if (!jsonrpc) reason.push('jsonrpc missing');
     else if (jsonrpc !== "2.0") reason.push('jsonrpc must be "2.0"');
     if (!method) reason.push('method missing');
+    else if (typeof method !== 'string') reason.push('method must be a string');
     if (id === undefined) reason.push('id missing');
     console.log("‼️ Invalid Request: " + reason.join(", "));
     console.log("Request object:", req.body);

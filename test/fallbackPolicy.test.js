@@ -32,7 +32,11 @@ ours({ code: -32000, message: 'header not found' });
 ours({ code: -32000, message: 'unknown block' });
 ours({ code: -32002, message: 'request timed out' });
 // "block not found" near our head may be our nodes lagging; unknown head or number: fall back
-ours({ code: -32001, message: `block not found: 0x${(HEAD + 2).toString(16)}` });
+// no margin (HB3): head + 1 is already the caller's; at or below the head it's ours
+caller({ code: -32001, message: `block not found: 0x${(HEAD + 1).toString(16)}` });
+caller({ code: -32001, message: `block not found: 0x${(HEAD + 2).toString(16)}` });
+ours({ code: -32001, message: `block not found: 0x${HEAD.toString(16)}` });
+ours({ code: -32001, message: `block not found: 0x${(HEAD - 5).toString(16)}` });
 ours({ code: -32001, message: `block not found: 0x${(HEAD + 1000).toString(16)}` }, null);
 ours({ code: -32001, message: 'block not found' });
 
@@ -46,7 +50,8 @@ assert.ok(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD,
 assert.ok(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD, { params: [{ to: '0x1' }, { blockNumber: hx(HEAD + 500) }] }), 'EIP-1898 future block');
 // near our head, or no block in the request: may be our nodes lagging → fall back
 ours({ code: -32000, message: 'header not found' });
-assert.strictEqual(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD, { params: ['0xabc', hx(HEAD + 2)] }), null);
+assert.ok(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD, { params: ['0xabc', hx(HEAD + 1)] }), 'geth head + 1 is the caller\'s');
+assert.strictEqual(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD, { params: ['0xabc', hx(HEAD)] }), null);
 assert.strictEqual(callerErrorReason({ code: -32000, message: 'header not found' }, HEAD, { params: [{ to: '0x1', value: '0xde0b6b3a7640000' }, 'latest'] }), null, 'a tx value is not a block');
 // geth missing state → our limitation, may fall back
 ours({ code: -32000, message: 'historical state 1dddf24a047383a8d1a9c7474a925f4c125c66f9ae962815c1bb3 is not available' });

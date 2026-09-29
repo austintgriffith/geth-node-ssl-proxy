@@ -10,15 +10,17 @@
 //   - history the node doesn't hold (reth "pruned", "history unavailable"; geth "historical
 //     state ... is not available", "missing trie node"); note -32603 "state ... is pruned" stays
 //     in ignoredErrorCodes and so still doesn't fall back
-//   - a block our nodes haven't reached yet: reth "block not found: 0x…", geth "header not
-//     found", "unknown block", for a block at most FUTURE_BLOCK_MARGIN above our cached head.
-//     Further ahead is a caller asking for a block that doesn't exist yet. The block comes from
-//     the message (reth) or, when the message has none (geth), from the request's params
+//   - a block missing at or below our cached head (reth "block not found: 0x…", geth "header
+//     not found", "unknown block"): a node behind or a reorg. A block ABOVE the cached head is the
+//     caller asking for a block that doesn't exist for us yet, and never falls back (owner,
+//     2026-09-29, independent audit HB3: head + 1…3 used to fall back as "our nodes may lag").
+//     The block comes from the message (reth) or, when the message has none (geth), from the
+//     request's params
 // Failures of the pool or the transport (no nodes, timeouts, broken sockets, invalid responses:
 // codes -69000 and below, and anything without a JSON-RPC error) fall back as before.
 
 const POOL_INFRA_CODE_MAX = -69000; // pool (-69xxx, -70001, -70002) and proxy (-69008, -70000) codes
-const FUTURE_BLOCK_MARGIN = 3; // blocks
+const FUTURE_BLOCK_MARGIN = 0; // blocks above the cached head still treated as ours (none)
 
 const MISSING_HISTORY = /pruned|history unavailable|historical state .*not available|missing trie node/i;
 const BLOCK_MISSING = /block not found|header not found|unknown block/i;
@@ -57,7 +59,7 @@ function callerErrorReason(error, cachedHead, request) {
     const m = message.match(/0x[0-9a-fA-F]+/);
     const block = m ? parseInt(m[0], 16) : requestedBlock(request?.params);
     const head = Number.isFinite(cachedHead) ? cachedHead : null;
-    // Without both numbers, or within a few blocks of our head, it may be our nodes lagging
+    // Without both numbers we can't tell; at or below our head, a node is missing a block it should have
     if (block === null || head === null || block <= head + FUTURE_BLOCK_MARGIN) return null;
     return `block ${block} is beyond the chain head (${head})`;
   }
