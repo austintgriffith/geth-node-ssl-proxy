@@ -16,7 +16,7 @@ const { logRequest } = require('./utils/logRequest');
 const { sendTelegramAlert } = require('./utils/telegramUtils');
 
 const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold } = require('./config');
-const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
+const { shouldSkipFallback } = require('./utils/shouldSkipFallback');
 
 // Initialize with empty array, will be updated by cache service
 let cachedMethods = [];
@@ -217,11 +217,7 @@ async function processSingleRequest(req) {
             requestType = 'pool';
             response = poolResult.data;
             status = "success";
-          } else if (
-            poolResult.error &&
-            poolResult.error.error &&
-            ignoredErrorCodes.includes(poolResult.error.error.code)
-          ) {
+          } else if (shouldSkipFallback(poolResult.error)) {
             // Do NOT try fallback for execution reverted
             response = poolResult.error;
             status = "error";
@@ -269,11 +265,7 @@ async function processSingleRequest(req) {
           requestType = 'pool';
           response = poolResult.data;
           status = "success";
-        } else if (
-          poolResult.error &&
-          poolResult.error.error &&
-          ignoredErrorCodes.includes(poolResult.error.error.code)
-        ) {
+        } else if (shouldSkipFallback(poolResult.error)) {
           // Do NOT try fallback for execution reverted
           response = poolResult.error;
           status = "error";
@@ -316,11 +308,7 @@ async function processSingleRequest(req) {
       if (poolResult.success) {
         response = poolResult.data;
         status = "success";
-      } else if (
-        poolResult.error &&
-        poolResult.error.error &&
-        ignoredErrorCodes.includes(poolResult.error.error.code)
-      ) {
+      } else if (shouldSkipFallback(poolResult.error)) {
         // Do NOT try fallback for execution reverted
         response = poolResult.error;
         status = "error";
