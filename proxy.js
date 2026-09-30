@@ -455,6 +455,11 @@ app.post("/", validateRpcRequest, async (req, res) => {
         return;
       }
       const individualRequest = req.body[i];
+      // An invalid item was answered by validateRpcRequest; the rest of the batch still runs
+      if (req.batchErrors?.has(i)) {
+        batchResponses.push(req.batchErrors.get(i));
+        continue;
+      }
       console.log(`📦 Processing batch request ${i + 1}/${req.body.length}:`, individualRequest);
       
       // Create a new request object for this individual request
@@ -504,6 +509,18 @@ app.post("/", validateRpcRequest, async (req, res) => {
   }
   
   console.log("-----------------------------------------------------------------------------------------");
+});
+
+// Anything that still throws answers JSON-RPC, never Express's HTML page (which carried a
+// stack trace with server paths)
+app.use((err, req, res, next) => {
+  console.error("❌ Unhandled error:", err);
+  if (res.headersSent) return next(err);
+  const error = { code: -70000, message: "Internal Proxy error" };
+  const body = Array.isArray(req.body)
+    ? req.body.map(item => ({ jsonrpc: "2.0", id: item?.id ?? null, error }))
+    : { jsonrpc: "2.0", id: req.body?.id ?? null, error };
+  res.status(200).json(body);
 });
 
 module.exports = {
