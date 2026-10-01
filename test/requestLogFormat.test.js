@@ -1,7 +1,7 @@
 // Run: node test/requestLogFormat.test.js
 process.env.EDGE_IPS = '34.232.148.119, 10.0.0.9';
 const assert = require('assert');
-const { formatLogLine, escapeField, normalizeIp, clientIp } = require('../utils/requestLogFormat');
+const { formatLogLine, escapeField, normalizeIp, clientIp, requestOrigin } = require('../utils/requestLogFormat');
 
 // Escaping: every '|' and newline leaves the field; '%' is escaped first, so it round-trips
 assert.strictEqual(escapeField('a|b\nc\rd%7Ce'), 'a%7Cb%0Ac%0Dd%257Ce');
@@ -36,4 +36,15 @@ assert.strictEqual(clientIp(req('::ffff:127.0.0.1', '1.1.1.1')), '127.0.0.1', 'l
 assert.strictEqual(clientIp(req(undefined, '1.1.1.1')), '-');
 // A batch item is Object.create(req): socket and get() come through the prototype
 assert.strictEqual(clientIp(Object.create(req('34.232.148.119', '203.0.113.7'))), '203.0.113.7');
+// Which origin gets logged: the Origin header as sent, or '' without one (no Referer/Host fallback)
+const withHeaders = (headers) => ({ get: (h) => headers[h.toLowerCase()] });
+assert.strictEqual(requestOrigin(withHeaders({ origin: 'https://speedrunethereum.com', host: 'pool.example:48544' })), 'https://speedrunethereum.com');
+assert.strictEqual(requestOrigin(withHeaders({ origin: 'buidlguidl-client' })), 'buidlguidl-client');
+assert.strictEqual(requestOrigin(withHeaders({ host: 'pool.example:48544' })), '', 'edge-stripped or no origin');
+assert.strictEqual(requestOrigin(withHeaders({ host: 'pool.example' })), '', 'not the host name (the old fallback logged it without a port)');
+assert.strictEqual(requestOrigin(withHeaders({ referer: 'http://localhost:3000/app', host: 'pool.example:48544' })), '', 'not the Referer');
+assert.strictEqual(requestOrigin(withHeaders({})), '', 'no Host either: no throw');
+assert.strictEqual(requestOrigin(withHeaders({ origin: '' })), '');
+assert.strictEqual(requestOrigin(Object.create(withHeaders({ origin: 'https://a.example' }))), 'https://a.example', 'batch items (Object.create(req))');
+
 console.log('requestLogFormat: all passed');

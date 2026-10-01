@@ -63,4 +63,14 @@ function formatLogLine(f) {
   ].join('|') + '\n';
 }
 
-module.exports = { formatLogLine, escapeField, normalizeIp, clientIp, FORMAT_MARKER, UNKNOWN_IP };
+// The origin logged for a request: its Origin header as sent, or '' without one. No fallback to
+// Referer or Host: Host is this proxy's own address, and the edge doesn't forward Referer. (The old
+// fallback gave '' only because new URL('<host>:48544') has an empty hostname; without the port it
+// logged this proxy's host name. The edge also strips the origins it doesn't track, so those log ''
+// too: bg-rpc-docs ORIGIN_CLASS_PLAN.md, Phase 2.)
+function requestOrigin(req) {
+  const origin = req.get('origin');
+  return typeof origin === 'string' ? origin : '';
+}
+
+module.exports = { formatLogLine, escapeField, normalizeIp, clientIp, requestOrigin, FORMAT_MARKER, UNKNOWN_IP };
