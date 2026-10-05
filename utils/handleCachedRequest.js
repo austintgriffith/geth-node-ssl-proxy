@@ -182,6 +182,7 @@ function clearOldCachedMethods() {
   console.log(`🧹 Running clearOldCachedMethods()`);
   const now = Date.now();
   let methodsToRemove = new Set();
+  const removedCounts = {}; // method → stale entries removed (keys can hold whole calldata, so not logged)
   
   // Check each cache entry
   for (const [key, cacheData] of cacheMap.entries()) {
@@ -202,8 +203,13 @@ function clearOldCachedMethods() {
     if (now - cacheData.timestamp > cacheMethodCleanupTimeout) {
       methodsToRemove.add(method);
       cacheMap.delete(key);
-      console.log(`🧹 Removed stale cache entry: ${key}`);
+      removedCounts[method] = (removedCounts[method] || 0) + 1;
     }
+  }
+  const removedTotal = Object.values(removedCounts).reduce((sum, n) => sum + n, 0);
+  if (removedTotal > 0) {
+    const perMethod = Object.entries(removedCounts).map(([m, n]) => `${m}: ${n}`).join(', ');
+    console.log(`🧹 Removed ${removedTotal} stale cache entr${removedTotal === 1 ? 'y' : 'ies'} (${perMethod})`);
   }
   
   // Update cachedMethods set
