@@ -15,9 +15,10 @@ const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleRequest, fetchGetLogsStatus } = require('./utils/handleRequest');
 const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('./utils/handleCachedRequest');
 const { logRequest } = require('./utils/logRequest');
+const { runBatch } = require('./utils/runBatch');
 const { sendTelegramAlert } = require('./utils/telegramUtils');
 
-const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback, methodsKeepLatest, maxRequestBodySize } = require('./config');
+const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback, methodsKeepLatest, maxRequestBodySize, batchConcurrency } = require('./config');
 const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
 const { callerErrorReason } = require('./utils/fallbackPolicy');
 
@@ -441,39 +442,30 @@ app.post("/", validateRpcRequest, async (req, res) => {
   if (Array.isArray(req.body)) {
     console.log("🔄 Processing batch request with", req.body.length, "requests");
     
-    const batchResponses = [];
-    // Items run one after another; if the caller disconnects (e.g. the edge gave up after its
-    // timeout), stop instead of making the nodes do work nobody will receive (independent
-    // audit HB1: nodes ran all 10 items of a batch the caller had abandoned at 12 s)
+    const items = req.body;
+    // Items run concurrently, at most batchConcurrency at a time, and are answered in order. If the
+    // caller disconnects (e.g. the edge gave up after its timeout), items not yet started are skipped
+    // instead of making the nodes do work nobody will receive (independent audit HB1: nodes ran all
+    // 10 items of a batch the caller had abandoned at 12 s)
     let callerGone = false;
     res.on('close', () => { if (!res.writableEnded) callerGone = true; });
 
-    // Process each request in the batch
-    for (let i = 0; i < req.body.length; i++) {
-      if (callerGone) {
-        console.log(`🛑 Caller disconnected; skipping the remaining ${req.body.length - i} of ${req.body.length} batch items`);
-        return;
-      }
-      const individualRequest = req.body[i];
+    const { answers: batchResponses, skipped } = await runBatch(items, async (individualRequest, i) => {
       // An invalid item was answered by validateRpcRequest; the rest of the batch still runs
-      if (req.batchErrors?.has(i)) {
-        batchResponses.push(req.batchErrors.get(i));
-        continue;
-      }
-      console.log(`📦 Processing batch request ${i + 1}/${req.body.length}:`, individualRequest);
-      
+      if (req.batchErrors?.has(i)) return req.batchErrors.get(i);
+      console.log(`📦 Processing batch request ${i + 1}/${items.length}:`, individualRequest);
+
       // Create a new request object for this individual request
       // We need to preserve the Express request methods like req.get()
       const individualReq = Object.create(req);
       individualReq.body = individualRequest;
-      
+
       try {
         // Process this individual request using the extracted logic
-        const response = await processSingleRequest(individualReq);
-        batchResponses.push(response);
+        return await processSingleRequest(individualReq);
       } catch (error) {
         // If individual request fails, create error response
-        const errorResponse = {
+        return {
           jsonrpc: "2.0",
           id: individualRequest.id,
           error: {
@@ -482,8 +474,12 @@ app.post("/", validateRpcRequest, async (req, res) => {
             data: error.message
           }
         };
-        batchResponses.push(errorResponse);
       }
+    }, { concurrency: batchConcurrency, isCancelled: () => callerGone });
+
+    if (callerGone) {
+      console.log(`🛑 Caller disconnected; skipped ${skipped} of ${items.length} batch items`);
+      return;
     }
     
     console.log("📦 Batch request completed, returning", batchResponses.length, "responses");

@@ -3,8 +3,15 @@ const proxyPortPublic = 48544;
 const webServerPort = 48545;
 const proxyPort = 3002;
 const poolPort = 3003;
-const fallbackRequestTimeout = 10000; // 10 seconds
-const poolRequestTimeout = 15000; // 15 seconds - must be >= longest pool method timeout (e.g. eth_getLogs 10s)
+// Timeout budget: pool + fallback must fit inside the edge's 15 s wait for this proxy. Past it the
+// edge stops waiting, asks the fallback provider again itself (a second paid request) and counts a
+// circuit-breaker failure.
+//   pool: a light request can take 3 attempts of up to 3 s each (first node, timeout retry, history
+//     retry: bg-rpc-pool nodeDefaultTimeout), so 9 s plus transfer
+//   fallback: the provider answered every logged request (531 by 2026-10-06) within 242 ms
+// 10 s + 4 s = 14 s, under the edge's 15 s.
+const fallbackRequestTimeout = 4000;
+const poolRequestTimeout = 10000;
 // Per-method overrides of poolRequestTimeout. Heavy methods: the pool gives up after 5s
 // (3s for filter creation/changes) with no retry, so 8s leaves room for transfer.
 const poolRequestTimeoutByMethod = {
@@ -14,6 +21,10 @@ const poolRequestTimeoutByMethod = {
   eth_getFilterChanges: 8000,
 };
 const maxBatchLength = 50; // Larger batches are rejected with -32600
+// Batch items in flight at once. One at a time, a batch took as long as all its items added
+// together and could outlast the edge's 15 s (a batch of 50 at the slowest 10% of eth_call, ~200 ms,
+// is ~10 s; one timed-out item adds 6 s), which sent the whole batch to the fallback provider.
+const batchConcurrency = 10;
 // Largest JSON body accepted. body-parser's default (100 KB) refused blob transactions
 // (~130 KB hex per blob, up to ~2.4 MB) and large eth_call data with an HTML 413 (request
 // audit, 2026-09-28). Alchemy accepts ~2.5 MB; the pool and nodes handled 1 MB fine.
@@ -50,6 +61,7 @@ module.exports = {
   poolRequestTimeout,
   poolRequestTimeoutByMethod,
   maxBatchLength,
+  batchConcurrency,
   maxRequestBodySize,
   methodsNeverFallback,
   methodsKeepLatest,
