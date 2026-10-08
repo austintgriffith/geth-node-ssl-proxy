@@ -14,11 +14,12 @@ require("dotenv").config();
 const { validateRpcRequest } = require('./utils/validateRpcRequest');
 const { handleRequest, fetchGetLogsStatus } = require('./utils/handleRequest');
 const { handleCachedRequest, subscribeToCacheUpdates, getCacheMap } = require('./utils/handleCachedRequest');
-const { logRequest } = require('./utils/logRequest');
+const { logRequest, logMergedRequest, callerOf } = require('./utils/logRequest');
+const { mergeKey, withId, createMerger } = require('./utils/requestMerge');
 const { runBatch } = require('./utils/runBatch');
 const { sendTelegramAlert } = require('./utils/telegramUtils');
 
-const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback, methodsKeepLatest, maxRequestBodySize, batchConcurrency } = require('./config');
+const { proxyPortPublic, proxyPort, fallbackRateAlertThreshold, methodsNeverFallback, methodsKeepLatest, maxRequestBodySize, batchConcurrency, mergeMaxFollowers } = require('./config');
 const { ignoredErrorCodes } = require('../shared/ignoredErrorCodes');
 const { callerErrorReason } = require('./utils/fallbackPolicy');
 
@@ -204,6 +205,63 @@ app.get("/watchdog", (req, res) => {
   res.json({ ok: true });
 });
 
+// The cache-miss path: the pool, then the fallback when the fallback policy allows it. Logs its own
+// pool / fallback lines. Returns { requestType, response, status }.
+async function poolThenFallback(req, reqOriginal, epochTime, utcTimestamp) {
+  let requestType;
+  let response;
+  let status;
+  const poolStartTime = performance.now();
+  const poolResult = await handleRequest(req, null, 'pool'); // Pass null for res
+  const poolDuration = (performance.now() - poolStartTime).toFixed(3);
+  
+  // Log pool attempt - only include full details for errors
+  logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : poolResult.error, 'pool');
+  
+  requestType = 'pool';
+  if (poolResult.success) {
+    response = poolResult.data;
+    status = "success";
+  } else if (noFallbackReason(req.body.method, poolResult, req.body)) {
+    // Do NOT try fallback for execution reverted etc. or for heavy methods
+    response = poolResult.error;
+    status = "error";
+    console.log(`⛔ ${noFallbackReason(req.body.method, poolResult, req.body)}, not retrying with fallback.`);
+  } else {
+    // Pool failed, try fallback
+    console.log("🔄 Pool request failed, trying fallback...");
+    const fallbackStartTime = performance.now();
+    const fallbackResult = await handleRequest(reqOriginal, null, 'fallback'); // Pass null for res
+    const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
+    
+    // Log fallback attempt - only include full details for errors
+    logRequest(reqOriginal, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
+    
+    requestType = 'fallback';
+    if (fallbackResult.success) {
+      response = validateFallbackResponse(fallbackResult.data, reqOriginal.body);
+      status = "success";
+      fallbackTimestamps.push(Date.now());
+      checkFallbackRateAndAlert();
+    } else {
+      response = fallbackResult.error;
+      status = "error";
+      fallbackTimestamps.push(Date.now());
+      checkFallbackRateAndAlert();
+    }
+  }
+  return { requestType, response, status };
+}
+
+// Identical requests in flight share one pool request (utils/requestMerge.js)
+const merger = createMerger({ maxFollowers: mergeMaxFollowers });
+
+// Our failure (may not be shared with merged requests): any failure the fallback policy doesn't call
+// the caller's own mistake, the same rule as the alerts below
+function isOurFailure(req, outcome) {
+  return outcome.status !== 'success' && !noFallbackReason(req.body.method, { error: outcome.response }, req.body);
+}
+
 // Extract single request processing logic into a reusable function
 async function processSingleRequest(req) {
   const { jsonrpc, id, method } = req.body;
@@ -342,45 +400,25 @@ async function processSingleRequest(req) {
         }
       }
     } else {
-      // Non-cached methods: Try pool first
-      const poolStartTime = performance.now();
-      const poolResult = await handleRequest(req, null, 'pool'); // Pass null for res
-      const poolDuration = (performance.now() - poolStartTime).toFixed(3);
-      
-      // Log pool attempt - only include full details for errors
-      logRequest(req, epochTime, utcTimestamp, poolDuration, poolResult.success ? "success" : poolResult.error, 'pool');
-      
-      requestType = 'pool';
-      if (poolResult.success) {
-        response = poolResult.data;
-        status = "success";
-      } else if (noFallbackReason(req.body.method, poolResult, req.body)) {
-        // Do NOT try fallback for execution reverted etc. or for heavy methods
-        response = poolResult.error;
-        status = "error";
-        console.log(`⛔ ${noFallbackReason(req.body.method, poolResult, req.body)}, not retrying with fallback.`);
-      } else {
-        // Pool failed, try fallback
-        console.log("🔄 Pool request failed, trying fallback...");
-        const fallbackStartTime = performance.now();
-        const fallbackResult = await handleRequest(reqOriginal, null, 'fallback'); // Pass null for res
-        const fallbackDuration = (performance.now() - fallbackStartTime).toFixed(3);
-        
-        // Log fallback attempt - only include full details for errors
-        logRequest(reqOriginal, epochTime, utcTimestamp, fallbackDuration, fallbackResult.success ? "success" : fallbackResult.error, 'fallback');
-        
-        requestType = 'fallback';
-        if (fallbackResult.success) {
-          response = validateFallbackResponse(fallbackResult.data, reqOriginal.body);
-          status = "success";
-          fallbackTimestamps.push(Date.now());
-          checkFallbackRateAndAlert();
-        } else {
-          response = fallbackResult.error;
-          status = "error";
-          fallbackTimestamps.push(Date.now());
-          checkFallbackRateAndAlert();
+      // Cache miss: the pool, then the fallback when allowed. An identical request already in
+      // flight is shared instead of sent again (utils/requestMerge.js)
+      const runOwn = () => poolThenFallback(req, reqOriginal, epochTime, utcTimestamp);
+      const key = mergeKey(req.body.method, req.body.params);
+      if (key) {
+        const merged = await merger.run(key, runOwn, { isOurFailure: (outcome) => isOurFailure(req, outcome), caller: callerOf(req) });
+        ({ requestType, response, status } = merged.outcome);
+        if (merged.role === 'follower') {
+          // Never touched a node: a cache hit for the dashboard, plus one line in mergedRequests.log
+          response = withId(response, req.body.id);
+          requestType = 'cache';
+          console.log(`🔗 merged into in-flight ${req.body.method} (waited ${merged.waitMs} ms${merged.sameCaller ? ', same caller' : ''})`);
+          logRequest(req, epochTime, utcTimestamp, merged.waitMs, status === 'success' ? 'success' : response, 'cache');
+          logMergedRequest(req, epochTime, utcTimestamp, merged.waitMs, merged.leaderEpoch, merged.sameCaller);
+        } else if (merged.role === 'own') {
+          console.log(`🔗 ${req.body.method} not merged: ${merged.reason}`);
         }
+      } else {
+        ({ requestType, response, status } = await runOwn());
       }
     }
     

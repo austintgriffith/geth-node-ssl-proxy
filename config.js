@@ -31,6 +31,24 @@ const batchConcurrency = 10;
 const maxRequestBodySize = '4mb';
 // Never sent to the fallback when the pool fails; the pool's error goes back to the caller
 const methodsNeverFallback = ['eth_getLogs', 'eth_newFilter', 'eth_getFilterLogs', 'eth_getFilterChanges'];
+// Identical requests in flight that may share one pool request (utils/requestMerge.js; bg-rpc-docs
+// PLAN_REQUEST_MERGING.md): reads whose answer is the same for every caller once pinned to a block
+// or hash. Never sends (a duplicate send must reach the node), filters, eth_getLogs (its own slots
+// and units at the edge) or node-specific methods (eth_accounts, net_peerCount, eth_syncing, ...).
+const mergeableMethods = new Set([
+  'eth_call', 'eth_estimateGas', 'eth_createAccessList',
+  'eth_getBalance', 'eth_getTransactionCount', 'eth_getCode', 'eth_getStorageAt', 'eth_getProof',
+  'eth_getBlockByNumber', 'eth_getBlockByHash', 'eth_getBlockReceipts',
+  'eth_getBlockTransactionCountByNumber', 'eth_getBlockTransactionCountByHash',
+  'eth_getUncleCountByBlockNumber', 'eth_getUncleCountByBlockHash',
+  'eth_getUncleByBlockNumberAndIndex', 'eth_getUncleByBlockHashAndIndex',
+  'eth_getTransactionByHash', 'eth_getTransactionByBlockNumberAndIndex', 'eth_getTransactionByBlockHashAndIndex',
+  'eth_getTransactionReceipt', 'eth_feeHistory',
+  // Not pinned to a block, but two copies in flight at the same moment have the same answer
+  'eth_blockNumber', 'eth_chainId', 'eth_gasPrice', 'eth_maxPriorityFeePerGas',
+]);
+// Followers per in-flight key; copies past this run on their own
+const mergeMaxFollowers = 100;
 // "latest" is passed through for these instead of being replaced with the cached head number:
 // reth serves them only at the node's own head (--rpc.eth-proof-window 0), and the cached number
 // can be a block behind (measured: 3 of 40 eth_getProof "latest" failed). Never cached either way.
@@ -50,7 +68,10 @@ const fallbackRateAlertThreshold = 9; // Fallback requests per hour to trigger t
 
 const fallbackRequestLogPath = "/home/ubuntu/shared/fallbackRequests.log";
 const cacheRequestLogPath = "/home/ubuntu/shared/cacheRequests.log";
-const poolRequestLogPath = "/home/ubuntu/shared/poolRequests.log";      
+const poolRequestLogPath = "/home/ubuntu/shared/poolRequests.log";
+// One line per merged request (utils/requestLogFormat.js formatMergedLine); the merged request is
+// also logged as a normal line in cacheRequests.log
+const mergedRequestLogPath = "/home/ubuntu/shared/mergedRequests.log";      
 
 module.exports = {
   proxyPortPublic,
@@ -64,6 +85,8 @@ module.exports = {
   batchConcurrency,
   maxRequestBodySize,
   methodsNeverFallback,
+  mergeableMethods,
+  mergeMaxFollowers,
   methodsKeepLatest,
   edgeIps,
   clientIpHeader,
@@ -77,4 +100,5 @@ module.exports = {
   fallbackRequestLogPath,
   cacheRequestLogPath,
   poolRequestLogPath,
+  mergedRequestLogPath,
 };

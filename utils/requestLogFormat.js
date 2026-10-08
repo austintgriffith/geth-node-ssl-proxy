@@ -12,6 +12,7 @@ const net = require('net');
 const { edgeIps, clientIpHeader } = require('../config');
 
 const FORMAT_MARKER = 'v2';
+const MERGED_FORMAT_MARKER = 'm1';
 const UNKNOWN_IP = '-';
 
 function escapeField(value) {
@@ -63,6 +64,32 @@ function formatLogLine(f) {
   ].join('|') + '\n';
 }
 
+/**
+ * One mergedRequests.log line (with trailing newline): a request answered by sharing an identical
+ * request already in flight (utils/requestMerge.js). Its normal line goes to cacheRequests.log.
+ *
+ *   m1|timestamp|epoch|origin|ip|method|waitMs|leaderEpoch|sameCaller
+ *
+ * Always exactly 9 fields (origin, ip and method escaped as in v2). No params: the method plus the
+ * cache line identify the request, and eth_call params can be KBs. waitMs: this request's wait for
+ * the shared answer; leaderEpoch: when the first request started; sameCaller: 1 if this request has
+ * the first request's origin and IP, else 0.
+ * @param {{ timestamp, epoch, origin, ip, method, waitMs, leaderEpoch, sameCaller }} f
+ */
+function formatMergedLine(f) {
+  return [
+    MERGED_FORMAT_MARKER,
+    f.timestamp,
+    f.epoch,
+    escapeField(f.origin),
+    escapeField(f.ip || UNKNOWN_IP),
+    escapeField(f.method),
+    f.waitMs,
+    f.leaderEpoch,
+    f.sameCaller ? 1 : 0,
+  ].join('|') + '\n';
+}
+
 // The origin logged for a request: its Origin header as sent, or '' without one. No fallback to
 // Referer or Host: Host is this proxy's own address, and the edge doesn't forward Referer. (The old
 // fallback gave '' only because new URL('<host>:48544') has an empty hostname; without the port it
@@ -73,4 +100,4 @@ function requestOrigin(req) {
   return typeof origin === 'string' ? origin : '';
 }
 
-module.exports = { formatLogLine, escapeField, normalizeIp, clientIp, requestOrigin, FORMAT_MARKER, UNKNOWN_IP };
+module.exports = { formatLogLine, formatMergedLine, escapeField, normalizeIp, clientIp, requestOrigin, FORMAT_MARKER, MERGED_FORMAT_MARKER, UNKNOWN_IP };

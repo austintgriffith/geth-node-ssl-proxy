@@ -1,6 +1,6 @@
 const fs = require('fs');
-const { fallbackRequestLogPath, cacheRequestLogPath, poolRequestLogPath } = require('../config');
-const { formatLogLine, clientIp, requestOrigin } = require('./requestLogFormat');
+const { fallbackRequestLogPath, cacheRequestLogPath, poolRequestLogPath, mergedRequestLogPath } = require('../config');
+const { formatLogLine, formatMergedLine, clientIp, requestOrigin } = require('./requestLogFormat');
 
 function logRequest(req, startTime, utcTimestamp, duration, status, type) {
   const { method, params } = req.body;
@@ -55,4 +55,29 @@ function logRequest(req, startTime, utcTimestamp, duration, status, type) {
   });
 }
 
-module.exports = { logRequest };
+/**
+ * A request answered by merging into an identical one in flight: one line in mergedRequests.log.
+ * (Its normal line goes to cacheRequests.log through logRequest(..., 'cache').)
+ */
+function logMergedRequest(req, startTime, utcTimestamp, waitMs, leaderEpoch, sameCaller) {
+  const line = formatMergedLine({
+    timestamp: utcTimestamp,
+    epoch: startTime,
+    origin: requestOrigin(req),
+    ip: clientIp(req),
+    method: req.body.method,
+    waitMs,
+    leaderEpoch,
+    sameCaller,
+  });
+  fs.appendFile(mergedRequestLogPath, line, (err) => {
+    if (err) console.error('Error writing to merged request log:', err);
+  });
+}
+
+// The caller as merging compares it: origin and IP, as logged
+function callerOf(req) {
+  return `${requestOrigin(req)}|${clientIp(req)}`;
+}
+
+module.exports = { logRequest, logMergedRequest, callerOf };
